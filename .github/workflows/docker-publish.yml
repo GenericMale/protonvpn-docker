@@ -74,5 +74,5 @@ jobs:
           account: user
           token: ${{ secrets.GITHUB_TOKEN }}
           cut-off: 1h
-          image-names: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          image-names: ${{ github.event.repository.name }}
           tag-selection: untagged
