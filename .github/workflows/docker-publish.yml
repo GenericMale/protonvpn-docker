@@ -73,6 +73,6 @@ jobs:
         with:
           account: user
           token: ${{ secrets.GITHUB_TOKEN }}
-          cut-off: 1h
+          cut-off: 0 min ago UTC
           image-names: ${{ github.event.repository.name }}
           tag-selection: untagged
