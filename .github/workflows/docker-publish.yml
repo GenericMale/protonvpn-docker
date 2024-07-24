@@ -75,7 +75,7 @@ jobs:
       - name: Fetch multi-platform package version SHAs
         id: multi-arch-digests
         run: |
-          package=$(docker manifest inspect "$IMAGE_NAME" | jq -r '.manifests.[].digest' | paste -s -d ' ' -)
+          package=$(docker manifest inspect $IMAGE_NAME | jq -r '.manifests[].digest' | paste -s -d ' ' -)
           echo "multi-arch-digests=$package" >> $GITHUB_OUTPUT
 
       - name: Delete old images
