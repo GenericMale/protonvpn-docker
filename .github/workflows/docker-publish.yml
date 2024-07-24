@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -66,3 +67,12 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
+
+      - name: Delete old images
+        uses: snok/container-retention-policy@v3
+        with:
+          account: user
+          token: ${{ secrets.GITHUB_TOKEN }}
+          cut-off: 1h
+          image-names: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tag-selection: untagged
