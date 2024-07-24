@@ -16,15 +16,7 @@ Minimal ProtonVPN Docker Image for use with other Containers.
 - Easily connect any number of containers.
 - Scheduled reconnection to enable automatic server switch.
 
-## Building
-
-To build the image, the following command can be used (adapt tag name to your liking):
-
-```sh
-docker image build . -t protonvpn-docker
-```
-
-## Setup
+## Usage
 
 Get your OpenVPN Credentials from [account.proton.me/u/0/vpn/OpenVpnIKEv2](https://account.proton.me/u/0/vpn/OpenVpnIKEv2).
 You can either use a secrets file which has username and password on two lines by setting `AUTH_USER_PASS_FILE`
@@ -33,7 +25,7 @@ like in the following example or alternatively configure the `OPENVPN_USER` and 
 ```yaml
 services:
     protonvpn:
-        image: protonvpn-docker
+        image: ghcr.io/genericmale/protonvpn-docker
         restart: unless-stopped
         environment:
             - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
@@ -52,7 +44,7 @@ secrets:
         file: protonvpn.auth
 ```
 
-To connect another container to the VPN, use `network_mode: service:protonvpn` on the other container, for example:
+To connect a container to the VPN, use `network_mode: service:protonvpn` on the other container, for example:
 
 ```yaml
 services:
@@ -95,4 +87,12 @@ Some examples for the `VPN_SERVER_FILTER`:
 # Fastest Servers but from different countries
 - VPN_SERVER_FILTER=group_by(.ExitCountry) | map(.[0]) | sort_by(.Score)
 
+```
+
+## Building
+
+To build the image, the following command can be used (adapt tag name to your liking):
+
+```sh
+docker image build . -t protonvpn-docker
 ```
