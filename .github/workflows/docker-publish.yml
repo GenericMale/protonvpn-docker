@@ -68,6 +68,14 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
+      # Prevent Manifest corruption when deleting old images, see:
+      # https://github.com/snok/container-retention-policy?tab=readme-ov-file#safely-handling-multi-platform-multi-arch-packages
+      - name: Fetch multi-platform package version SHAs
+        id: multi-arch-digests
+        run: |
+          package=$(docker manifest inspect "$REGISTRY/$IMAGE_NAME" | jq -r '.manifests.[].digest' | paste -s -d ' ' -)
+          echo "multi-arch-digests=$package" >> $GITHUB_OUTPUT
+
       - name: Delete old images
         uses: snok/container-retention-policy@v3.0.0
         with:
@@ -76,3 +84,4 @@ jobs:
           cut-off: 0s
           image-names: ${{ github.event.repository.name }}
           tag-selection: untagged
+          skip-shas: ${{ steps.multi-arch-digests.outputs.multi-arch-digests }}

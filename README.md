@@ -2,9 +2,8 @@
 
 [![](https://img.shields.io/github/license/GenericMale/protonvpn-docker)](https://github.com/GenericMale/protonvpn-docker/blob/main/LICENSE)
 [![](https://github.com/GenericMale/protonvpn-docker/actions/workflows/docker-publish.yml/badge.svg?label=build)](https://github.com/GenericMale/protonvpn-docker/actions/workflows/docker-publish.yml)
-[![](https://ghcr-badge.egpl.dev/GenericMale/protonvpn-docker/latest_tag?ignore=sha256*,latest)](https://github.com/GenericMale/protonvpn-docker/pkgs/container/protonvpn-docker/versions)
-[![](https://ghcr-badge.egpl.dev/GenericMale/protonvpn-docker/tags?ignore=)](https://github.com/users/GenericMale/packages/container/package/protonvpn-docker)
-[![](https://ghcr-badge.egpl.dev/GenericMale/protonvpn-docker/size?tag=main)](https://github.com/users/GenericMale/packages/container/package/protonvpn-docker)
+[![](https://ghcr-badge.egpl.dev/GenericMale/protonvpn-docker/tags?ignore=&n=10)](https://github.com/GenericMale/protonvpn-docker/pkgs/container/protonvpn-docker/versions)
+[![](https://ghcr-badge.egpl.dev/GenericMale/protonvpn-docker/size)](https://github.com/users/GenericMale/packages/container/package/protonvpn-docker)
 
 Minimal ProtonVPN Docker Image for use with other Containers.
 
@@ -26,7 +25,7 @@ like in the following example or alternatively configure the `OPENVPN_USER` and 
 ```yaml
 services:
     protonvpn:
-        image: ghcr.io/genericmale/protonvpn-docker
+        image: ghcr.io/genericmale/protonvpn-docker:latest
         restart: unless-stopped
         environment:
             - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
