@@ -20,7 +20,7 @@ jobs:
       security-events: write
     steps:
       - name: Generate lowercase image name
-        run: echo "IMAGE_NAME=${REGISTRY@L}/${github.repository@L}" >>${GITHUB_ENV}
+        run: echo "IMAGE_NAME=${REGISTRY@L}/${GITHUB_REPOSITORY@L}" >>${GITHUB_ENV}
 
       - name: Checkout repository
         uses: actions/checkout@v4
