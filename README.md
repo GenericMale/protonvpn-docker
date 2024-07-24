@@ -1,4 +1,11 @@
 # ProtonVPN Docker Image
+[![](https://img.shields.io/github/license/GenericMale/protonvpn-docker)](https://github.com/GenericMale/protonvpn-docker/blob/main/LICENSE)
+[![](https://github.com/GenericMale/protonvpn-docker/actions/workflows/docker-publish.yml/badge.svg?label=build)](https://github.com/GenericMale/protonvpn-docker/actions/workflows/docker-publish.yml)
+[![](https://ghcr-badge.egpl.dev/GenericMale/protonvpn-docker/latest_tag?ignore=sha256*,latest)](https://github.com/GenericMale/protonvpn-docker/pkgs/container/protonvpn-docker/versions)
+![](https://ghcr-badge.egpl.dev/GenericMale/protonvpn-docker/size?ignore=sha256*,latest)
+
+---
+
 Minimal ProtonVPN Docker Image for use with other Containers.
 
 ## Features
