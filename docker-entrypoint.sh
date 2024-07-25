@@ -12,9 +12,16 @@
 : "${VPN_KILL_SWITCH:=1}" #Disconnect on VPN drop
 
 if [ ! -f $OPENVPN_USER_PASS_FILE ]; then
+    #Create auth file from credentials if it doesn't exist
     echo $OPENVPN_USER >$OPENVPN_USER_PASS_FILE
     echo $OPENVPN_PASS >>$OPENVPN_USER_PASS_FILE
 fi
+
+#Initial JQ Filter for Servers. Filters for proton tier and enabled and sorts by fastest.
+get_servers=".LogicalServers | map(select(.Tier <= $PROTON_TIER and .Status == 1)) | sort_by(.Score)"
+
+#Final JQ Filter to remove duplicate IPs and limit number of results.
+get_unique_ip_list="map({(.Servers[].EntryIP):1}) | add | keys_unsorted | .[:$VPN_SERVER_COUNT][]"
 
 while true; do
     if pgrep -x openvpn >/dev/null; then
@@ -22,37 +29,43 @@ while true; do
         echo "Disconnecting..."
 
         if [[ $VPN_KILL_SWITCH -eq 1 ]]; then
+          #Disable Kill Switch
           iptables -F
           iptables -P OUTPUT ACCEPT
           iptables -P INPUT ACCEPT
         fi
 
         pkill openvpn
-        while pgrep -x openvpn >/dev/null; do sleep 1; done
+        while pgrep -x openvpn >/dev/null; do sleep 1; done #wait until openvpn process is gone
     fi
 
     echo "Fetching Server List..."
-    get_servers=".LogicalServers | map(select(.Tier <= $PROTON_TIER and .Status == 1)) | sort_by(.Score)"
-    get_unique_ip_list="map({(.Servers[].EntryIP):1}) | add | keys_unsorted | .[:$VPN_SERVER_COUNT][]"
-    servers=$(wget -q -O- $PROTON_API_URL | jq -r "$get_servers | $VPN_SERVER_FILTER | $get_unique_ip_list")
-    echo ${servers//$'\n'/ }
+    servers=$(wget -q -O- $PROTON_API_URL | jq "$get_servers | $VPN_SERVER_FILTER | $get_unique_ip_list")
+    echo "Filtered Server Pool: ${servers//$'\n'/, }"
 
     if [[ $VPN_KILL_SWITCH -eq 1 ]]; then
+      #Default Drop All
       iptables -F
       iptables -P INPUT DROP
       iptables -P OUTPUT DROP
       iptables -P FORWARD DROP
+
+      #Allow Localhost
       iptables -A INPUT -i lo -j ACCEPT
       iptables -A OUTPUT -o lo -j ACCEPT
+
+      #Allow VPN
       iptables -A INPUT -i tun0 -j ACCEPT
       iptables -A OUTPUT -o tun0 -j ACCEPT
       iptables -A INPUT -p udp -m udp --sport 1194 -j ACCEPT
       iptables -A OUTPUT -p udp -m udp --dport 1194 -j ACCEPT
+
+      #Allow default docker address pool to enable communication with other containers
       iptables -A INPUT -s 172.16.0.0/12 -i eth0 -j ACCEPT
       iptables -A OUTPUT -d 172.16.0.0/12 -o eth0 -j ACCEPT
     fi
 
-    #Start in background
+    #Start OpenVPN in background
     echo "Connecting..."
     eval "openvpn --config $OPENVPN_CONFIG_FILE --auth-user-pass $OPENVPN_USER_PASS_FILE --remote ${servers//$'\n'/' --remote '} &"
 
@@ -67,7 +80,8 @@ while true; do
     fi
 
     if [ -z $VPN_RECONNECT ]; then
-        #Halt until OpenVPN is interrupted if reconnect not set
+        #Halt until OpenVPN process is interrupted if scheduled reconnect is disabled.
+        #So if OpenVPN crashes we'll loop over and try to connect again.
         wait
     elif [[ $VPN_RECONNECT == *":"* ]]; then
         #Convert HH:MM to seconds from now
