@@ -10,7 +10,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build:
@@ -20,6 +19,9 @@ jobs:
       packages: write
       security-events: write
     steps:
+      - name: Generate lowercase image name
+        run: echo "IMAGE_NAME=${REGISTRY@L}/${GITHUB_REPOSITORY@L}" >>${GITHUB_ENV}
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -38,7 +40,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.IMAGE_NAME }}
 
       - name: Build and push Docker image
         id: build
@@ -55,7 +57,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           scanners: 'vuln,secret,config'
           format: 'sarif'
           output: 'trivy-results.sarif'
