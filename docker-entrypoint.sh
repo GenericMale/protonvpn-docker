@@ -7,8 +7,9 @@
 : "${OPENVPN_CONFIG_FILE:=/etc/openvpn/protonvpn.ovpn}"
 
 : "${PROTON_API_URL:=https://api.protonvpn.ch/vpn/logicals}"
-: "${IP_URL:=https://ifconfig.co/json}"
+: "${IP_CHECK_URL:=https://ifconfig.co/json}"
 : "${PROTON_TIER:=2}" #Proton Tier. 0=Free, 1=Basic, 2=Plus, 3=Visionary
+: "${VPN_KILL_SWITCH:=1}" #Disconnect on VPN drop
 
 if [ ! -f $OPENVPN_USER_PASS_FILE ]; then
     echo $OPENVPN_USER >$OPENVPN_USER_PASS_FILE
@@ -20,9 +21,11 @@ while true; do
         #Call API without VPN to get proper scores
         echo "Disconnecting..."
 
-        iptables -F
-        iptables -P OUTPUT ACCEPT
-        iptables -P INPUT ACCEPT
+        if [[ $VPN_KILL_SWITCH -eq 1 ]]; then
+          iptables -F
+          iptables -P OUTPUT ACCEPT
+          iptables -P INPUT ACCEPT
+        fi
 
         pkill openvpn
         while pgrep -x openvpn >/dev/null; do sleep 1; done
@@ -34,28 +37,29 @@ while true; do
     servers=$(wget -q -O- $PROTON_API_URL | jq -r "$get_servers | $VPN_SERVER_FILTER | $get_unique_ip_list")
     echo ${servers//$'\n'/ }
 
-    #Engage Kill Switch
-    iptables -F
-    iptables -P INPUT DROP
-    iptables -P OUTPUT DROP
-    iptables -P FORWARD DROP
-    iptables -A INPUT -i lo -j ACCEPT
-    iptables -A OUTPUT -o lo -j ACCEPT
-    iptables -A INPUT -i tun0 -j ACCEPT
-    iptables -A OUTPUT -o tun0 -j ACCEPT
-    iptables -A INPUT -p udp -m udp --sport 1194 -j ACCEPT
-    iptables -A OUTPUT -p udp -m udp --dport 1194 -j ACCEPT
-    iptables -A INPUT -s 172.16.0.0/12 -i eth0 -j ACCEPT
-    iptables -A OUTPUT -d 172.16.0.0/12 -o eth0 -j ACCEPT
+    if [[ $VPN_KILL_SWITCH -eq 1 ]]; then
+      iptables -F
+      iptables -P INPUT DROP
+      iptables -P OUTPUT DROP
+      iptables -P FORWARD DROP
+      iptables -A INPUT -i lo -j ACCEPT
+      iptables -A OUTPUT -o lo -j ACCEPT
+      iptables -A INPUT -i tun0 -j ACCEPT
+      iptables -A OUTPUT -o tun0 -j ACCEPT
+      iptables -A INPUT -p udp -m udp --sport 1194 -j ACCEPT
+      iptables -A OUTPUT -p udp -m udp --dport 1194 -j ACCEPT
+      iptables -A INPUT -s 172.16.0.0/12 -i eth0 -j ACCEPT
+      iptables -A OUTPUT -d 172.16.0.0/12 -o eth0 -j ACCEPT
+    fi
 
     #Start in background
     echo "Connecting..."
     eval "openvpn --config $OPENVPN_CONFIG_FILE --auth-user-pass $OPENVPN_USER_PASS_FILE --remote ${servers//$'\n'/' --remote '} &"
 
-    if [ "$IP_URL" ]; then
+    if [ "$IP_CHECK_URL" ] && [[ $VPN_KILL_SWITCH -eq 1 ]]; then
         #Wait for new IP. Kill Switch blocks until VPN is up.
         while true; do
-            ip=$(wget -T 3 -q -O- $IP_URL 2>/dev/null)
+            ip=$(wget -T 3 -q -O- $IP_CHECK_URL 2>/dev/null)
             if [[ "$?" -eq 0 ]]; then break; fi
             sleep 1
         done
