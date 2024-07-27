@@ -2,9 +2,9 @@ FROM alpine:3.20
 
 RUN apk add --no-cache openvpn iptables jq
 
-COPY protonvpn.ovpn route-up.sh /etc/openvpn/
+WORKDIR /etc/openvpn/
 
-COPY docker-entrypoint.sh /
-RUN chmod +x /docker-entrypoint.sh /etc/openvpn/route-up.sh
+COPY docker-entrypoint.sh protonvpn.ovpn route-up.sh ./
+RUN chmod +x docker-entrypoint.sh route-up.sh
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

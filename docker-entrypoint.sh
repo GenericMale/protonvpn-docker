@@ -7,7 +7,10 @@ trap 'kill -TERM $(jobs -p); wait; exit' TERM # propagate SIGTERM to openvpn in 
 : "${OPENVPN_USER_PASS_FILE:=/etc/openvpn/protonvpn.auth}"
 : "${OPENVPN_CONFIG_FILE:=/etc/openvpn/protonvpn.ovpn}"
 
-: "${PROTON_API_URL:=https://api.protonvpn.ch/vpn/logicals}"
+: "${OPENVPN_CA_FILE:=/etc/openvpn/ca.crt}"
+: "${OPENVPN_TLS_CRYPT_FILE:=/etc/openvpn/ta.key}"
+
+: "${PROTON_API_URL:=https://api.protonvpn.ch}"
 : "${PROTON_TIER:=2}" #Proton Tier. 0=Free, 1=Basic, 2=Plus, 3=Visionary
 : "${VPN_KILL_SWITCH:=1}" #Disconnect on VPN drop
 
@@ -39,9 +42,19 @@ while true; do
 
     #Call API without VPN to get proper scores
     echo "Fetching Server List..."
-    servers=$(wget -q -O- $PROTON_API_URL | jq "$get_servers | $VPN_SERVER_FILTER | $get_unique_ip_list")
-    extra_args="--remote ${servers//$'\n'/' --remote '}"
-    echo "Server Pool: ${servers//$'\n'/ }"
+    servers=$(wget -q -O- "$PROTON_API_URL/vpn/logicals" | jq "$get_servers | $VPN_SERVER_FILTER")
+    server_ips=$(echo $servers | jq "$get_unique_ip_list")
+    extra_args="--remote ${server_ips//$'\n'/' --remote '}"
+    echo "Server Pool: ${server_ips//$'\n'/ }"
+
+    #Get ProtonVPN Config and extract CA cert & TLS key. They are the same for all servers and never change.
+    if [ ! -f $OPENVPN_CA_FILE ] || [ ! -f $OPENVPN_TLS_CRYPT_FILE ]; then
+        echo "Downloading Certificates..."
+        logical_id=$(echo $servers|jq -r ".[0].ID")
+        openvpn_config=$(wget -q -O- "$PROTON_API_URL/vpn/config?Platform=Linux&Protocol=udp&LogicalID=$logical_id")
+        echo "$openvpn_config" | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > $OPENVPN_CA_FILE
+        echo "$openvpn_config" | sed -n '/BEGIN OpenVPN Static key/,/END OpenVPN Static key/p' > $OPENVPN_TLS_CRYPT_FILE
+    fi
 
     #Engage Kill Switch
     if [[ $VPN_KILL_SWITCH -eq 1 ]]; then
@@ -56,14 +69,14 @@ while true; do
       iptables -A OUTPUT -o lo -j ACCEPT
 
       #Allow VPN
-      iptables -A INPUT -i tun0 -j ACCEPT
-      iptables -A OUTPUT -o tun0 -j ACCEPT
-      iptables -A INPUT -p udp -m udp --sport 1194 -j ACCEPT
+      iptables -A INPUT -i tun+ -j ACCEPT
+      iptables -A OUTPUT -o tun+ -j ACCEPT
+      iptables -A INPUT -m state --state ESTABLISHED -j ACCEPT
       iptables -A OUTPUT -p udp -m udp --dport 1194 -j ACCEPT
 
       #Allow default docker address pool to enable communication with other containers
-      iptables -A INPUT -s 172.16.0.0/12 -i eth0 -j ACCEPT
-      iptables -A OUTPUT -d 172.16.0.0/12 -o eth0 -j ACCEPT
+      iptables -A INPUT -s 172.16.0.0/12 -i eth+ -j ACCEPT
+      iptables -A OUTPUT -d 172.16.0.0/12 -o eth+ -j ACCEPT
     fi
 
     #Set session timeout if reconnect enabled
@@ -82,5 +95,6 @@ while true; do
 
     echo "Connecting..."
     sh -c "openvpn --config $OPENVPN_CONFIG_FILE --auth-user-pass $OPENVPN_USER_PASS_FILE $extra_args" &
+    unset servers server_ips extra_args logical_id openvpn_config timeout
     wait
 done

@@ -66,18 +66,18 @@ This configuration achieves the following:
 
 ### Environment Variables
 
-| Variable               | Default                               | Description                                                                                                                                  |
-|------------------------|---------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| OPENVPN_USER_PASS_FILE | /etc/openvpn/protonvpn.auth           | Path to a file containing your OpenVPN username and password on separate lines.                                                              |
-| OPENVPN_USER           | *(undefined)*                         | Username for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn't exist.                                            |
-| OPENVPN_PASS           | *(undefined)*                         | Password for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn't exist.                                            |
-| PROTON_TIER            | 2                                     | Your Proton Tier. Valid values: 0 (Free), 1 (Basic), 2 (Plus), 3 (Visionary)                                                                 |
-| PROTON_API_URL         | https://api.protonvpn.ch/vpn/logicals | URL of the API used to query for available ProtonVPN servers.                                                                                |
-| IP_CHECK_URL           | https://ifconfig.co/json              | URL to check for your new IP address after connecting to the VPN. Unset to disable.                                                          |                                                                                                                              
-| VPN_SERVER_FILTER      | .                                     | Optional JQ filter to apply to the server list returned by the API. By default, servers are ranked by their score (closest/fastest on top).  |
-| VPN_SERVER_COUNT       | 1                                     | Number of top servers (from the filtered list) to pass to OpenVPN. One server from this list will be randomly chosen for connection.         |
-| VPN_RECONNECT          | *(undefined)*                         | Optional time to schedule automatic reconnection. Either HH:MM for a daily reconnect at a fixed time, or a duration to wait (e.g. 30m, 12h). |
-| VPN_KILL_SWITCH        | 1                                     | When enabled (1), disconnects the network when the VPN drops. Set to 0 to disable.                                                           |
+| Variable               | Default                     | Description                                                                                                                                  |
+|------------------------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| OPENVPN_USER_PASS_FILE | /etc/openvpn/protonvpn.auth | Path to a file containing your OpenVPN username and password on separate lines.                                                              |
+| OPENVPN_USER           | *(undefined)*               | Username for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn't exist.                                            |
+| OPENVPN_PASS           | *(undefined)*               | Password for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn't exist.                                            |
+| PROTON_TIER            | 2                           | Your Proton Tier. Valid values: 0 (Free), 1 (Basic), 2 (Plus), 3 (Visionary)                                                                 |
+| PROTON_API_URL         | https://api.protonvpn.ch    | URL of the API used to query for available ProtonVPN servers.                                                                                |
+| IP_CHECK_URL           | https://ifconfig.co/json    | URL to check for your new IP address after connecting to the VPN. Unset to disable.                                                          |                                                                                                                              
+| VPN_SERVER_FILTER      | .                           | Optional JQ filter to apply to the server list returned by the API. By default, servers are ranked by their score (closest/fastest on top).  |
+| VPN_SERVER_COUNT       | 1                           | Number of top servers (from the filtered list) to pass to OpenVPN. One server from this list will be randomly chosen for connection.         |
+| VPN_RECONNECT          | *(undefined)*               | Optional time to schedule automatic reconnection. Either HH:MM for a daily reconnect at a fixed time, or a duration to wait (e.g. 30m, 12h). |
+| VPN_KILL_SWITCH        | 1                           | When enabled (1), disconnects the network when the VPN drops. Set to 0 to disable.                                                           |
 
 ### JQ Filters for Advanced Server Selection
 
