@@ -51,6 +51,9 @@ services:
         image: vimagick/privoxy:latest
         restart: unless-stopped
         network_mode: service:protonvpn
+        depends_on:
+          protonvpn:
+            condition: service_healthy
 secrets:
     protonvpn:
         file: protonvpn.auth
@@ -61,6 +64,7 @@ This configuration achieves the following:
 - Uses `VPN_SERVER_COUNT=10` to randomly selects one of the 10 fastest servers.
 - Schedules reconnection at 2:00 AM with `VPN_RECONNECT=2:00` to rotate servers.
 - Runs a Privoxy container attached to the VPN network. (`network_mode: service:protonvpn`)
+- Privoxy is not started until the VPN is connected with `depends_on` and `condition: service_healthy`.
 - Exposes Privoxy's port (8118) for clients to connect to the VPN using Privoxy as a forward proxy.
   Notice the port mapping on the ProtonVPN container.
 
@@ -72,7 +76,6 @@ This configuration achieves the following:
 | OPENVPN_USER           | *(undefined)*               | Username for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn't exist.                                            |
 | OPENVPN_PASS           | *(undefined)*               | Password for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn't exist.                                            |
 | PROTON_TIER            | 2                           | Your Proton Tier. Valid values: 0 (Free), 1 (Basic), 2 (Plus), 3 (Visionary)                                                                 |
-| PROTON_API_URL         | https://api.protonvpn.ch    | URL of the API used to query for available ProtonVPN servers.                                                                                |
 | IP_CHECK_URL           | https://ifconfig.co/json    | URL to check for your new IP address after connecting to the VPN. Unset to disable.                                                          |                                                                                                                              
 | VPN_SERVER_FILTER      | .                           | Optional JQ filter to apply to the server list returned by the API. By default, servers are ranked by their score (closest/fastest on top).  |
 | VPN_SERVER_COUNT       | 1                           | Number of top servers (from the filtered list) to pass to OpenVPN. One server from this list will be randomly chosen for connection.         |
