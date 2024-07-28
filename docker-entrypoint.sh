@@ -141,7 +141,8 @@ connect() {
   #Set session timeout if reconnect enabled
   if [[ "$VPN_RECONNECT" ]]; then
     local timeout=$(get_timeout_seconds)
-    echo "Session Timeout in $timeout seconds"
+    local date=$(date @$(($(date +%s) + $timeout)) 2> /dev/null)
+    echo "Reconnecting on $date ($timeout sec)"
     sleep $timeout &
   fi
 
