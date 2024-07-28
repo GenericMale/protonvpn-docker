@@ -14,6 +14,9 @@ trap 'kill -TERM $(jobs -p); wait; exit' TERM # propagate SIGTERM to openvpn in 
 : "${PROTON_TIER:=2}" #Proton Tier. 0=Free, 1=Basic, 2=Plus, 3=Visionary
 : "${VPN_KILL_SWITCH:=1}" #Disconnect on VPN drop
 
+: "${EXTERNAL_USER:=openvpn}"
+: "${INTERNAL_NETWORK:=172.16.0.0/12}"
+
 if [ ! -f $OPENVPN_USER_PASS_FILE ]; then
     #Create auth file from credentials if it doesn't exist
     echo $OPENVPN_USER >$OPENVPN_USER_PASS_FILE
@@ -26,58 +29,70 @@ get_servers=".LogicalServers | map(select(.Tier <= $PROTON_TIER and .Status == 1
 #Final JQ Filter to remove duplicate IPs and limit number of results.
 get_unique_ip_list="map({(.Servers[].EntryIP):1}) | add | keys_unsorted | .[:$VPN_SERVER_COUNT][]"
 
+#Engage Kill Switch
+if [[ $VPN_KILL_SWITCH -eq 1 ]]; then
+  #Default Drop All
+  iptables -F
+  iptables -P INPUT DROP
+  iptables -P OUTPUT DROP
+  iptables -P FORWARD DROP
+
+  #Allow Localhost
+  iptables -A INPUT -i lo -j ACCEPT
+  iptables -A OUTPUT -o lo -j ACCEPT
+
+  #Allow VPN
+  iptables -A INPUT -i tun+ -j ACCEPT
+  iptables -A OUTPUT -o tun+ -j ACCEPT
+
+  #Accept All Responses
+  iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+  #Allow default docker address pool to enable communication with other containers
+  iptables -A INPUT -s $INTERNAL_NETWORK -i eth+ -j ACCEPT
+  iptables -A OUTPUT -d $INTERNAL_NETWORK -o eth+ -j ACCEPT
+
+  echo "Kill Switch enabled"
+fi
+
+#Enable Split Tunneling and put OpenVPN user in external area
+iptables -t mangle -A OUTPUT -m owner --uid-owner "$EXTERNAL_USER" -j MARK --set-mark 1
+iptables -A OUTPUT -m mark --mark 1 -j ACCEPT
+ip rule add fwmark 1 table 1
+
+gateway=$(ip route | grep -m 1 default | cut -d' ' -f3)
+ip route add default via $gateway table 1
+
+nameserver=$(grep -m 1 '^nameserver' /etc/resolv.conf | cut -d' ' -f2)
+if [ $nameserver == '127.0.0.11' ]; then
+  nameserver="$nameserver:$(netstat -anu | awk '{ print $4 }' | grep $nameserver | cut -d: -f2)"
+fi
+iptables -t nat -A OUTPUT -m mark --mark 1 -p udp --dport 53 -j DNAT --to-destination $nameserver
+iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE
+
 while true; do
+    echo "Fetching Server List..."
+    servers=$(su -s /bin/sh $EXTERNAL_USER -c "wget -q -O- $PROTON_API_URL/vpn/logicals | jq \"$get_servers | $VPN_SERVER_FILTER\"")
+    server_ips=$(echo $servers | jq -r "$get_unique_ip_list")
+    echo "Server Pool: ${server_ips//$'\n'/ }"
+
+    #Get ProtonVPN Config and extract CA cert & TLS key
+    if [ ! -f $OPENVPN_CA_FILE ] || [ ! -f $OPENVPN_TLS_CRYPT_FILE ]; then
+        echo "Downloading Certificates..."
+        logical_id=$(echo $servers|jq -r ".[0].ID")
+        openvpn_config=$(su -s /bin/sh $EXTERNAL_USER -c "wget -q -O- \"$PROTON_API_URL/vpn/config?Platform=Linux&Protocol=udp&LogicalID=$logical_id\"")
+        echo "$openvpn_config" | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > $OPENVPN_CA_FILE
+        echo "$openvpn_config" | sed -n '/BEGIN OpenVPN Static key/,/END OpenVPN Static key/p' > $OPENVPN_TLS_CRYPT_FILE
+    fi
+
     if pgrep -x openvpn >/dev/null; then
         echo "Disconnecting..."
         pkill openvpn
         while pgrep -x openvpn >/dev/null; do sleep 1; done #wait until openvpn process is gone
     fi
 
-    #Disable Kill Switch
-    if [[ $VPN_KILL_SWITCH -eq 1 ]]; then
-      iptables -F
-      iptables -P OUTPUT ACCEPT
-      iptables -P INPUT ACCEPT
-    fi
-
-    #Call API without VPN to get proper scores
-    echo "Fetching Server List..."
-    servers=$(wget -q -O- "$PROTON_API_URL/vpn/logicals" | jq "$get_servers | $VPN_SERVER_FILTER")
-    server_ips=$(echo $servers | jq "$get_unique_ip_list")
-    extra_args="--remote ${server_ips//$'\n'/' --remote '}"
-    echo "Server Pool: ${server_ips//$'\n'/ }"
-
-    #Get ProtonVPN Config and extract CA cert & TLS key. They are the same for all servers and never change.
-    if [ ! -f $OPENVPN_CA_FILE ] || [ ! -f $OPENVPN_TLS_CRYPT_FILE ]; then
-        echo "Downloading Certificates..."
-        logical_id=$(echo $servers|jq -r ".[0].ID")
-        openvpn_config=$(wget -q -O- "$PROTON_API_URL/vpn/config?Platform=Linux&Protocol=udp&LogicalID=$logical_id")
-        echo "$openvpn_config" | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > $OPENVPN_CA_FILE
-        echo "$openvpn_config" | sed -n '/BEGIN OpenVPN Static key/,/END OpenVPN Static key/p' > $OPENVPN_TLS_CRYPT_FILE
-    fi
-
-    #Engage Kill Switch
-    if [[ $VPN_KILL_SWITCH -eq 1 ]]; then
-      #Default Drop All
-      iptables -F
-      iptables -P INPUT DROP
-      iptables -P OUTPUT DROP
-      iptables -P FORWARD DROP
-
-      #Allow Localhost
-      iptables -A INPUT -i lo -j ACCEPT
-      iptables -A OUTPUT -o lo -j ACCEPT
-
-      #Allow VPN
-      iptables -A INPUT -i tun+ -j ACCEPT
-      iptables -A OUTPUT -o tun+ -j ACCEPT
-      iptables -A INPUT -m state --state ESTABLISHED -j ACCEPT
-      iptables -A OUTPUT -p udp -m udp --dport 1194 -j ACCEPT
-
-      #Allow default docker address pool to enable communication with other containers
-      iptables -A INPUT -s 172.16.0.0/12 -i eth+ -j ACCEPT
-      iptables -A OUTPUT -d 172.16.0.0/12 -o eth+ -j ACCEPT
-    fi
+    echo "Connecting..."
+    openvpn --config $OPENVPN_CONFIG_FILE --auth-user-pass $OPENVPN_USER_PASS_FILE --remote ${server_ips//$'\n'/' --remote '} &
 
     #Set session timeout if reconnect enabled
     if [ "$VPN_RECONNECT" ]; then
@@ -90,11 +105,8 @@ while true; do
             timeout=$(($(echo $VPN_RECONNECT | sed 's/d/*24*3600 +/g; s/h/*3600 +/g; s/m/*60 +/g; s/s/\+/g; s/+[ ]*$//g')))
         fi
         echo "Session Timeout in $timeout seconds"
-        extra_args="$extra_args --session-timeout $timeout"
+        sleep $timeout &
     fi
 
-    echo "Connecting..."
-    sh -c "openvpn --config $OPENVPN_CONFIG_FILE --auth-user-pass $OPENVPN_USER_PASS_FILE $extra_args" &
-    unset servers server_ips extra_args logical_id openvpn_config timeout
-    wait
+    wait $! #Wait until OpenVPN dies or we have to reconnect
 done
