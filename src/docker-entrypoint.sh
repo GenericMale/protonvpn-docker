@@ -140,17 +140,33 @@ connect() {
   echo "Connecting..."
   # shellcheck disable=SC2086
   openvpn --config "$OPENVPN_CONFIG_FILE" --auth-user-pass "$OPENVPN_USER_PASS_FILE" --remote ${servers//$'\n'/' --remote '} &
+  local openvpn_pid=$!
 
   #Set session timeout if reconnect enabled
   if [[ "$VPN_RECONNECT" ]]; then
     local timeout="$(get_timeout_seconds)"
     local date="$(date @$(($(date +%s) + timeout)) 2>/dev/null)"
+
     echo "Reconnecting on $date ($timeout sec)"
     sleep "$timeout" &
-  fi
+    local sleep_pid=$!
 
-  #Wait until OpenVPN dies or we have to reconnect
-  wait $!
+    while true; do
+      # wait for any subprocess to terminate. apparently wait -n doesn't accept a PID list in busybox
+      wait -n
+
+      # check if openvpn itself or our sleep has terminated
+      if ! kill -0 $openvpn_pid 2>/dev/null; then
+        kill $sleep_pid # clean up the sleep when openvpn has died
+        break
+      elif ! kill -0 $sleep_pid 2>/dev/null; then
+        break
+      fi
+    done
+  else
+    #Just wait until OpenVPN is terminated
+    wait $openvpn_pid
+  fi
 }
 
 if [[ "$VPN_KILL_SWITCH" -eq 1 ]]; then
