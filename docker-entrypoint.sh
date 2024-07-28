@@ -1,5 +1,5 @@
-#!/bin/sh
-trap 'kill -TERM $(jobs -p); wait; exit' TERM # propagate SIGTERM to openvpn in subshell
+#!/bin/ash
+# shellcheck disable=SC2155
 
 : "${VPN_SERVER_COUNT:=1}"  #How many of the fastest servers to rotate
 : "${VPN_SERVER_FILTER:=.}" #Additional jq filter to apply to server list
@@ -20,9 +20,11 @@ trap 'kill -TERM $(jobs -p); wait; exit' TERM # propagate SIGTERM to openvpn in 
 
 #Create auth file from credentials if it doesn't exist
 if [[ ! -f "$OPENVPN_USER_PASS_FILE" ]]; then
-  echo $OPENVPN_USER >$OPENVPN_USER_PASS_FILE
-  echo $OPENVPN_PASS >>$OPENVPN_USER_PASS_FILE
+  echo "$OPENVPN_USER" >"$OPENVPN_USER_PASS_FILE"
+  echo "$OPENVPN_PASS" >>"$OPENVPN_USER_PASS_FILE"
 fi
+
+trap 'kill -TERM $(jobs -p); wait; exit' TERM # propagate SIGTERM to openvpn in subshell
 
 activate_kill_switch() {
   #Default Drop All
@@ -44,8 +46,8 @@ activate_kill_switch() {
 
   if [[ "$INTERNAL_NETWORK" ]]; then
     #Allow default docker address pool to enable communication with other containers
-    iptables -A INPUT -s $INTERNAL_NETWORK -i eth+ -j ACCEPT
-    iptables -A OUTPUT -d $INTERNAL_NETWORK -o eth+ -j ACCEPT
+    iptables -A INPUT -s "$INTERNAL_NETWORK" -i eth+ -j ACCEPT
+    iptables -A OUTPUT -d "$INTERNAL_NETWORK" -o eth+ -j ACCEPT
   fi
 
   echo "Kill Switch enabled"
@@ -59,22 +61,22 @@ deactivate_kill_switch() {
 }
 
 setup_split_tunnel() {
-  local gateway=$(ip route | grep -m 1 default | cut -d' ' -f3)
+  local gateway="$(ip route | grep -m 1 default | cut -d' ' -f3)"
 
   local nameserver=$(grep -m 1 '^nameserver' /etc/resolv.conf | cut -d' ' -f2)
   if [[ "$nameserver" == "127.0.0.11" ]]; then
     #docker internal DNS has a random port
-    nameserver="$nameserver:$(netstat -anu | awk '{ print $4 }' | grep $nameserver | cut -d: -f2)"
+    nameserver="$nameserver:$(netstat -anu | awk '{ print $4 }' | grep "$nameserver" | cut -d: -f2)"
   fi
 
   #Create own routing table for user and allow outgoing calls to original gateway
   iptables -t mangle -A OUTPUT -m owner --uid-owner "$EXTERNAL_USER" -j MARK --set-mark 1
   iptables -A OUTPUT -m mark --mark 1 -j ACCEPT
   ip rule add fwmark 1 table 1
-  ip route add default via $gateway table 1
+  ip route add default via "$gateway" table 1
 
   #Redirect DNS to original nameserver
-  iptables -t nat -A OUTPUT -m mark --mark 1 -p udp --dport 53 -j DNAT --to-destination $nameserver
+  iptables -t nat -A OUTPUT -m mark --mark 1 -p udp --dport 53 -j DNAT --to-destination "$nameserver"
   iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE
 }
 
@@ -83,8 +85,8 @@ download_servers() {
 
   #Filters by proton tier & enabled status and sort for fastest
   local filter=".LogicalServers | map(select(.Tier <= $PROTON_TIER and .Status == 1)) | sort_by(.Score)"
-  su -s /bin/sh $EXTERNAL_USER -c \
-  "wget -q -O- $PROTON_API_URL/vpn/logicals | jq \"$filter | $VPN_SERVER_FILTER\"" >$PROTON_SERVER_FILE
+  su -s /bin/ash "$EXTERNAL_USER" -c \
+    "wget -q -O- $PROTON_API_URL/vpn/logicals | jq \"$filter | $VPN_SERVER_FILTER\"" >"$PROTON_SERVER_FILE"
 }
 
 generate_certificates() {
@@ -92,15 +94,15 @@ generate_certificates() {
     echo "Downloading Certificates..."
 
     #Get ProtonVPN config by using first server
-    local logical_id=$(cat $PROTON_SERVER_FILE | jq -r ".[0].ID")
-    local openvpn_config=$(
-      su -s /bin/sh $EXTERNAL_USER -c \
-      "wget -q -O- \"$PROTON_API_URL/vpn/config?Platform=Linux&Protocol=udp&LogicalID=$logical_id\""
-    )
+    local logical_id="$(jq -r ".[0].ID" "$PROTON_SERVER_FILE")"
+    local openvpn_config="$(
+      su -s /bin/ash "$EXTERNAL_USER" -c \
+        "wget -q -O- \"$PROTON_API_URL/vpn/config?Platform=Linux&Protocol=udp&LogicalID=$logical_id\""
+    )"
 
     #Extract CA cert & TLS key from config
-    echo "$openvpn_config" | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' >$OPENVPN_CA_FILE
-    echo "$openvpn_config" | sed -n '/BEGIN OpenVPN Static key/,/END OpenVPN Static key/p' >$OPENVPN_TLS_CRYPT_FILE
+    echo "$openvpn_config" | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' >"$OPENVPN_CA_FILE"
+    echo "$openvpn_config" | sed -n '/BEGIN OpenVPN Static key/,/END OpenVPN Static key/p' >"$OPENVPN_TLS_CRYPT_FILE"
   fi
 }
 
@@ -117,12 +119,12 @@ kill_openvpn() {
 get_timeout_seconds() {
   if [[ "$VPN_RECONNECT" == *":"* ]]; then
     #Convert HH:MM to seconds from now
-    local timeout=$(($(date -d $VPN_RECONNECT +%s) - $(date +%s)))
+    local timeout=$(($(date -d "$VPN_RECONNECT" +%s) - $(date +%s)))
     if [[ "$timeout" -lt 0 ]]; then timeout=$((86400 + timeout)); fi
     echo $timeout
   else
     #Convert duration like "1d", "2h 5m 30s" etc to seconds
-    echo $(($(echo $VPN_RECONNECT | sed 's/d/*24*3600 +/g; s/h/*3600 +/g; s/m/*60 +/g; s/s/\+/g; s/+[ ]*$//g')))
+    echo $(($(echo "$VPN_RECONNECT" | sed 's/d/*24*3600 +/g; s/h/*3600 +/g; s/m/*60 +/g; s/s/\+/g; s/+[ ]*$//g')))
   fi
 }
 
@@ -133,17 +135,18 @@ connect() {
 
   #Get Server IPs, remove duplicates and limit number of results.
   local get_unique_ip_list="map({(.Servers[].EntryIP):1}) | add | keys_unsorted | .[:$VPN_SERVER_COUNT][]"
-  local servers=$(cat $PROTON_SERVER_FILE | jq -r "$get_unique_ip_list")
+  local servers="$(jq -r "$get_unique_ip_list" "$PROTON_SERVER_FILE")"
 
   echo "Connecting..."
-  openvpn --config $OPENVPN_CONFIG_FILE --auth-user-pass $OPENVPN_USER_PASS_FILE --remote ${servers//$'\n'/' --remote '} &
+  # shellcheck disable=SC2086
+  openvpn --config "$OPENVPN_CONFIG_FILE" --auth-user-pass "$OPENVPN_USER_PASS_FILE" --remote ${servers//$'\n'/' --remote '} &
 
   #Set session timeout if reconnect enabled
   if [[ "$VPN_RECONNECT" ]]; then
-    local timeout=$(get_timeout_seconds)
-    local date=$(date @$(($(date +%s) + $timeout)) 2> /dev/null)
+    local timeout="$(get_timeout_seconds)"
+    local date="$(date @$(($(date +%s) + timeout)) 2>/dev/null)"
     echo "Reconnecting on $date ($timeout sec)"
-    sleep $timeout &
+    sleep "$timeout" &
   fi
 
   #Wait until OpenVPN dies or we have to reconnect
