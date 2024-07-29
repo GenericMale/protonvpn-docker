@@ -128,6 +128,18 @@ get_timeout_seconds() {
   fi
 }
 
+# wait for any of the provided list of processes to terminate
+wait_any() {
+  local loop=true
+  while $loop; do
+    wait -n #apparently busybox "wait -n" doesn't accept a list of PIDs
+    for pid in "$@"; do
+      # check if any of the processes in the list we got is the one which died
+      if ! kill -0 "$pid" >/dev/null 2>&1; then loop=false; fi
+    done
+  done
+}
+
 connect() {
   download_servers
   generate_certificates
@@ -151,18 +163,8 @@ connect() {
     sleep "$timeout" &
     local sleep_pid=$!
 
-    while true; do
-      # wait for any subprocess to terminate. apparently wait -n doesn't accept a PID list in busybox
-      wait -n
-
-      # check if openvpn itself or our sleep has terminated
-      if ! kill -0 $openvpn_pid 2>/dev/null; then
-        kill $sleep_pid # clean up the sleep when openvpn has died
-        break
-      elif ! kill -0 $sleep_pid 2>/dev/null; then
-        break
-      fi
-    done
+    wait_any $openvpn_pid $sleep_pid
+    kill $sleep_pid 2>/dev/null # clean up the sleep when openvpn has died
   else
     #Just wait until OpenVPN is terminated
     wait $openvpn_pid
