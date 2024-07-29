@@ -6,6 +6,7 @@
 
 : "${OPENVPN_USER_PASS_FILE:=/etc/openvpn/protonvpn.auth}"
 : "${OPENVPN_CONFIG_FILE:=/etc/openvpn/protonvpn.ovpn}"
+: "${OPENVPN_EXTRA_ARGS:=}"
 
 : "${OPENVPN_CA_FILE:=/etc/openvpn/ca.crt}"
 : "${OPENVPN_TLS_CRYPT_FILE:=/etc/openvpn/ta.key}"
@@ -17,6 +18,9 @@
 : "${VPN_KILL_SWITCH:=1}"              #Disconnect on VPN drop
 : "${EXTERNAL_USER:=openvpn}"          #User which bypasses VPN via split tunneling
 : "${INTERNAL_NETWORK:=172.16.0.0/12}" #Default docker address pool which is allowed to bypass kill switch
+
+: "${IP_CHECK_URL:=https://ifconfig.co/json}" #URL to query for external IP
+: "${CONNECT_TIMEOUT:=60}"                    #Maximum time in seconds to wait for a new IP until a reconnect is triggered.
 
 #Create auth file from credentials if it doesn't exist
 if [[ ! -f "$OPENVPN_USER_PASS_FILE" ]]; then
@@ -128,16 +132,46 @@ get_timeout_seconds() {
   fi
 }
 
-# wait for any of the provided list of processes to terminate
+# wait for any of the provided list of subprocesses to terminate
 wait_any() {
-  local loop=true
-  while $loop; do
-    wait -n #apparently busybox "wait -n" doesn't accept a list of PIDs
+  while true; do
     for pid in "$@"; do
-      # check if any of the processes in the list we got is the one which died
-      if ! kill -0 "$pid" >/dev/null 2>&1; then loop=false; fi
+      # check if any of the processes in the list we got is terminated
+      if ! kill -0 "$pid" >/dev/null 2>&1; then break 2; fi
     done
+    wait -n #wait for any subprocess to die. apparently busybox "wait -n" doesn't accept a list of PIDs
   done
+}
+
+wait_for_new_ip() {
+  if [[ "$IP_CHECK_URL" ]]; then
+    local get_ip_cmd="wget -T 3 -q -O- $IP_CHECK_URL 2>/dev/null"
+    local format_ip="IP: \(.ip) \(.country) (\(.asn_org // .asn // .hostname))"
+
+    local old_ip_json="$(su -s /bin/ash "$EXTERNAL_USER" -c "$get_ip_cmd")"
+    if [[ ! "$old_ip_json" ]]; then
+      echo "Failed to get old IP, skipping IP check."
+      return
+    fi
+
+    echo "$old_ip_json" | jq -r "\"Old $format_ip\""
+    local old_ip=$(echo "$old_ip_json" | jq -r '.ip')
+
+    local start=$(date +%s)
+    while [[ "$CONNECT_TIMEOUT" -ge $(($(date +%s) - start)) ]]; do
+      local ip_json=$(su -s /bin/ash -c "$get_ip_cmd")
+      local new_ip=$(echo "$ip_json" | jq -r '.ip')
+
+      if [[ "$new_ip" ]] && [[ "$old_ip" != "$new_ip" ]]; then
+        echo "$ip_json" | jq -r "\"New $format_ip\""
+        return
+      fi
+      sleep 1
+    done
+
+    echo "Timed out waiting for IP change, reconnecting..."
+    return 1
+  fi
 }
 
 connect() {
@@ -151,8 +185,9 @@ connect() {
 
   echo "Connecting..."
   # shellcheck disable=SC2086
-  openvpn --config "$OPENVPN_CONFIG_FILE" --auth-user-pass "$OPENVPN_USER_PASS_FILE" --remote ${servers//$'\n'/' --remote '} &
+  openvpn --config "$OPENVPN_CONFIG_FILE" --auth-user-pass "$OPENVPN_USER_PASS_FILE" --remote ${servers//$'\n'/' --remote '} $OPENVPN_EXTRA_ARGS &
   local openvpn_pid=$!
+  if ! wait_for_new_ip; then return; fi
 
   #Set session timeout if reconnect enabled
   if [[ "$VPN_RECONNECT" ]]; then
