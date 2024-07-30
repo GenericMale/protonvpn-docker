@@ -1,0 +1,12 @@
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT DROP [0:0]
+-A INPUT -i lo -j ACCEPT
+-A OUTPUT -o lo -j ACCEPT
+-A INPUT -i tun+ -j ACCEPT
+-A OUTPUT -o tun+ -j ACCEPT
+-A INPUT -s 172.16.0.0/12 -i eth+ -j ACCEPT
+-A OUTPUT -d 172.16.0.0/12 -o eth+ -j ACCEPT
+-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+COMMIT

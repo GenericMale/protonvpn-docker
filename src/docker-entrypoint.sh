@@ -15,9 +15,8 @@
 : "${PROTON_TIER:=2}" #Proton Tier. 0=Free, 1=Basic, 2=Plus, 3=Visionary
 : "${PROTON_SERVER_FILE:=/etc/openvpn/servers.json}"
 
-: "${VPN_KILL_SWITCH:=1}"              #Disconnect on VPN drop
-: "${EXTERNAL_USER:=openvpn}"          #User which bypasses VPN via split tunneling
-: "${INTERNAL_NETWORK:=172.16.0.0/12}" #Default docker address pool which is allowed to bypass kill switch
+: "${VPN_KILL_SWITCH:=1}"     #Disconnect on VPN drop
+: "${EXTERNAL_USER:=openvpn}" #User which bypasses VPN via split tunneling
 
 : "${IP_CHECK_URL:=https://ifconfig.co/json}" #URL to query for external IP
 : "${CONNECT_TIMEOUT:=60}"                    #Maximum time in seconds to wait for a new IP until a reconnect is triggered.
@@ -28,49 +27,14 @@ if [[ ! -f "$OPENVPN_USER_PASS_FILE" ]]; then
   echo "$OPENVPN_PASS" >>"$OPENVPN_USER_PASS_FILE"
 fi
 
-trap 'kill -TERM $(jobs -p); wait; exit' TERM # propagate SIGTERM to openvpn in subshell
-
-activate_kill_switch() {
-  #Default Drop All
-  iptables -F
-  iptables -P INPUT DROP
-  iptables -P OUTPUT DROP
-  iptables -P FORWARD DROP
-
-  #Allow Localhost
-  iptables -A INPUT -i lo -j ACCEPT
-  iptables -A OUTPUT -o lo -j ACCEPT
-
-  #Allow VPN
-  iptables -A INPUT -i tun+ -j ACCEPT
-  iptables -A OUTPUT -o tun+ -j ACCEPT
-
-  #Accept All Responses
-  iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-  if [[ "$INTERNAL_NETWORK" ]]; then
-    #Allow default docker address pool to enable communication with other containers
-    iptables -A INPUT -s "$INTERNAL_NETWORK" -i eth+ -j ACCEPT
-    iptables -A OUTPUT -d "$INTERNAL_NETWORK" -o eth+ -j ACCEPT
-  fi
-
-  echo "Kill Switch enabled"
-}
-
-deactivate_kill_switch() {
-  iptables -F
-  iptables -P INPUT ACCEPT
-  iptables -P OUTPUT ACCEPT
-  iptables -P FORWARD ACCEPT
-}
-
 setup_split_tunnel() {
   local gateway="$(ip route | grep -m 1 default | cut -d' ' -f3)"
 
   local nameserver=$(grep -m 1 '^nameserver' /etc/resolv.conf | cut -d' ' -f2)
   if [[ "$nameserver" == "127.0.0.11" ]]; then
     #docker internal DNS has a random port
-    nameserver="$nameserver:$(netstat -anu | awk '{ print $4 }' | grep "$nameserver" | cut -d: -f2)"
+    local ns_port=$(netstat -anu | awk '{ print $4 }' | grep "$nameserver" | cut -d: -f2)
+    nameserver="$nameserver:$ns_port"
   fi
 
   #Create own routing table for user and allow outgoing calls to original gateway
@@ -184,8 +148,14 @@ connect() {
   local servers="$(jq -r "$get_unique_ip_list" "$PROTON_SERVER_FILE")"
 
   echo "Connecting..."
+
   # shellcheck disable=SC2086
-  openvpn --config "$OPENVPN_CONFIG_FILE" --auth-user-pass "$OPENVPN_USER_PASS_FILE" --remote ${servers//$'\n'/' --remote '} $OPENVPN_EXTRA_ARGS &
+  openvpn \
+    --config "$OPENVPN_CONFIG_FILE" \
+    --auth-user-pass "$OPENVPN_USER_PASS_FILE" \
+    --remote ${servers//$'\n'/' --remote '} \
+    $OPENVPN_EXTRA_ARGS &
+
   local openvpn_pid=$!
   if ! wait_for_new_ip; then return; fi
 
@@ -206,10 +176,11 @@ connect() {
   fi
 }
 
+trap 'kill_openvpn; exit' TERM # gracefully shutdown openvpn on SIGTERM
+
 if [[ "$VPN_KILL_SWITCH" -eq 1 ]]; then
-  activate_kill_switch
-else
-  deactivate_kill_switch
+  iptables-restore /etc/iptables/killswitch.rules
+  echo "Kill Switch enabled"
 fi
 
 setup_split_tunnel
