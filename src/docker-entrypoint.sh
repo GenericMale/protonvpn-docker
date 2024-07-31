@@ -21,6 +21,8 @@
 : "${IP_CHECK_URL:=https://ifconfig.co/json}" #URL to query for external IP
 : "${CONNECT_TIMEOUT:=60}"                    #Maximum time in seconds to wait for a new IP until a reconnect is triggered.
 
+: "${HTTP_PROXY:=0}" #Start proxy server
+
 #Create auth file from credentials if it doesn't exist
 if [[ ! -f "$OPENVPN_USER_PASS_FILE" ]]; then
   echo "$OPENVPN_USER" >"$OPENVPN_USER_PASS_FILE"
@@ -74,13 +76,13 @@ generate_certificates() {
   fi
 }
 
-kill_openvpn() {
-  if pgrep -x openvpn >/dev/null; then
-    echo "Disconnecting..."
-    pkill openvpn
+kill_process() {
+  if pgrep -x "$1" >/dev/null; then
+    echo "Stopping $1..."
+    pkill "$1"
 
-    #wait until openvpn process is gone
-    while pgrep -x openvpn >/dev/null; do sleep 1; done
+    #wait until process is gone
+    while pgrep -x "$1" >/dev/null; do sleep 1; done
   fi
 }
 
@@ -141,7 +143,7 @@ wait_for_new_ip() {
 connect() {
   download_servers
   generate_certificates
-  kill_openvpn
+  kill_process openvpn
 
   #Get Server IPs, remove duplicates and limit number of results.
   local get_unique_ip_list="map({(.Servers[].EntryIP):1}) | add | keys_unsorted | .[:$VPN_SERVER_COUNT][]"
@@ -176,7 +178,7 @@ connect() {
   fi
 }
 
-trap 'kill_openvpn; exit' TERM # gracefully shutdown openvpn on SIGTERM
+trap 'kill_process openvpn; kill_process tinyproxy; exit' TERM # gracefully shutdown on SIGTERM
 
 if [[ "$VPN_KILL_SWITCH" -eq 1 ]]; then
   iptables-restore /etc/iptables/killswitch.rules
@@ -184,6 +186,11 @@ if [[ "$VPN_KILL_SWITCH" -eq 1 ]]; then
 fi
 
 setup_split_tunnel
+
+if [[ "$HTTP_PROXY" -eq 1 ]]; then
+  echo "Starting Proxy..."
+  tinyproxy -d &
+fi
 
 while true; do
   connect

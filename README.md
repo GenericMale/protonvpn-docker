@@ -15,6 +15,7 @@ This Docker image provides a lightweight and secure solution to connect your con
 - **Automatic Server Rotation (Optional):** Schedule automatic reconnection to switch servers periodically.
 - **Multi-Container Support:** Easily connect any number of containers to the VPN.
 - **Kill Switch:** Disconnect containers on VPN drop.
+- **HTTP Proxy (Optional):** Easily route any http and https traffic through the VPN.
 
 ## Usage
 
@@ -22,12 +23,14 @@ This Docker image provides a lightweight and secure solution to connect your con
 2. **Configure Credentials:** Choose one of the following methods:
    - **Secrets File:** Create a file containing your username and password on separate lines. Set the `AUTH_USER_PASS_FILE` environment variable to the file path.
    - **Environment Variables:** Define the `OPENVPN_USER` and `OPENVPN_PASS` environment variables with your credentials.
-3. **Connect Containers:** Use the `network_mode: service:protonvpn` option in your Docker Compose configuration for containers requiring VPN access.
+3. **Connect Containers and/or Enable HTTP Proxy:**
+   - **VPN Access:** Use the `network_mode: service:protonvpn` option in your Docker Compose configuration for containers requiring VPN protection.
+   - **HTTP Proxy:** Set the `HTTP_PROXY` environment variable to `1` and map port `3128` to use the VPN in any application with HTTP(S) proxy support.
 
 **Important Note on Port Mapping:**
 Since containers share the network stack when using `network_mode`, the port mappings for services requiring external access need to be defined on the ProtonVPN container.
 
-### Example Docker Compose File
+### Example Docker Compose with other Container
 
 ```yaml
 services:
@@ -69,6 +72,31 @@ This configuration achieves the following:
 - Exposes Privoxy's port (8118) for clients to connect to the VPN using Privoxy as a forward proxy.
   Notice the port mapping on the ProtonVPN container.
 
+### Example Docker Compose using built-in Proxy
+
+```yaml
+services:
+    protonvpn:
+        image: genericmale/protonvpn-docker
+        restart: unless-stopped
+        environment:
+            - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
+            - HTTP_PROXY=1
+        ports:
+            - 3128:3128
+        volumes:
+            - /etc/localtime:/etc/localtime:ro
+        devices:
+            - /dev/net/tun
+        cap_add:
+            - NET_ADMIN
+        secrets:
+            - protonvpn
+secrets:
+    protonvpn:
+        file: protonvpn.auth
+```
+
 ### Environment Variables
 
 | Variable               | Default                     | Description                                                                                                                                  |
@@ -84,6 +112,7 @@ This configuration achieves the following:
 | VPN_SERVER_COUNT       | 1                           | Number of top servers (from the filtered list) to pass to OpenVPN. One server from this list will be randomly chosen for connection.         |
 | VPN_RECONNECT          | *(undefined)*               | Optional time to schedule automatic reconnection. Either HH:MM for a daily reconnect at a fixed time, or a duration to wait (e.g. 30m, 12h). |
 | VPN_KILL_SWITCH        | 1                           | When enabled (1), disconnects the network when the VPN drops. Set to 0 to disable.                                                           |
+| HTTP_PROXY             | 0                           | When enabled (1), starts tinyproxy on port 3128.                                                                                             |
 
 ### JQ Filters for Advanced Server Selection
 
@@ -122,4 +151,5 @@ docker image build . -t protonvpn-docker
 - Docker Compose Overview: https://docs.docker.com/compose/
 - ProtonVPN Documentation: https://protonvpn.com/support/linux-openvpn/
 - OpenVPN Reference Manual: https://openvpn.net/community-resources/reference-manual-for-openvpn-2-6/
+- Tinyproxy: https://tinyproxy.github.io/
 - JQ Manual: https://jqlang.github.io/jq/manual/
