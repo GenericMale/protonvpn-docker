@@ -7,6 +7,10 @@ on:
     paths: [ 'src/**' ]
   workflow_dispatch:
 
+env:
+  GITHUB_IMAGE: ghcr.io/genericmale/protonvpn-docker
+  DOCKERHUB_IMAGE: genericmale/protonvpn
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,9 +19,6 @@ jobs:
       packages: write
       security-events: write
     steps:
-      - name: Generate lowercase image name
-        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY@L}" >>${GITHUB_ENV}
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -43,8 +44,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ env.IMAGE_NAME }}
-            name=${{ env.IMAGE_NAME }},enable=${{github.ref_type == 'tag'}}
+            ${{ env.GITHUB_IMAGE }}
+            name=${{ env.DOCKERHUB_IMAGE }},enable=${{github.ref_type == 'tag'}}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -68,7 +69,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ghcr.io/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ env.GITHUB_IMAGE }}@${{ steps.build.outputs.digest }}
           scanners: 'vuln,secret,config'
           format: 'sarif'
           output: 'trivy-results.sarif'

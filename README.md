@@ -3,8 +3,8 @@
 [![](https://img.shields.io/github/license/GenericMale/protonvpn-docker?logo=github)](https://github.com/GenericMale/protonvpn-docker/blob/main/LICENSE)
 [![](https://img.shields.io/github/last-commit/genericmale/protonvpn-docker?label=commit&logo=github)](https://github.com/GenericMale/protonvpn-docker)
 [![](https://img.shields.io/github/actions/workflow/status/genericmale/protonvpn-docker/docker-publish.yml?label=build&logo=githubactions&logoColor=white)](https://github.com/GenericMale/protonvpn-docker/actions/workflows/docker-publish.yml)
-[![](https://img.shields.io/docker/v/genericmale/protonvpn-docker?logo=docker&logoColor=white)](https://hub.docker.com/r/genericmale/protonvpn-docker/tags)
-[![](https://img.shields.io/docker/image-size/genericmale/protonvpn-docker?label=size&logo=docker&logoColor=white)](https://hub.docker.com/r/genericmale/protonvpn-docker/tags)
+[![](https://img.shields.io/docker/v/genericmale/protonvpn?logo=docker&logoColor=white)](https://hub.docker.com/r/genericmale/protonvpn/tags)
+[![](https://img.shields.io/docker/image-size/genericmale/protonvpn?label=size&logo=docker&logoColor=white)](https://hub.docker.com/r/genericmale/protonvpn/tags)
 
 This Docker image provides a lightweight and secure solution to connect your containers to ProtonVPN.
 
@@ -35,7 +35,7 @@ Since containers share the network stack when using `network_mode`, the port map
 ```yaml
 services:
     protonvpn:
-        image: genericmale/protonvpn-docker
+        image: genericmale/protonvpn
         restart: unless-stopped
         environment:
             - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
@@ -77,7 +77,7 @@ This configuration achieves the following:
 ```yaml
 services:
     protonvpn:
-        image: genericmale/protonvpn-docker
+        image: genericmale/protonvpn
         restart: unless-stopped
         environment:
             - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
@@ -143,7 +143,7 @@ Some examples:
 To build the image, the following command can be used (adapt tag name to your liking):
 
 ```sh
-docker image build . -t protonvpn-docker
+docker image build . -t protonvpn
 ```
 
 ## Additional Resources
