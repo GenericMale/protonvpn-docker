@@ -29,13 +29,17 @@ if [[ ! -f "$OPENVPN_USER_PASS_FILE" ]]; then
   echo "$OPENVPN_PASS" >>"$OPENVPN_USER_PASS_FILE"
 fi
 
+log() {
+  echo "$(date "+%Y-%m-%d %H:%M:%S") $1"
+}
+
 setup_split_tunnel() {
   local gateway="$(ip route | grep -m 1 default | cut -d' ' -f3)"
 
   local nameserver=$(grep -m 1 '^nameserver' /etc/resolv.conf | cut -d' ' -f2)
   if [[ "$nameserver" == "127.0.0.11" ]]; then
     #docker internal DNS has a random port
-    local ns_port=$(netstat -anu | awk '{ print $4 }' | grep "$nameserver" | cut -d: -f2)
+    local ns_port=$(netstat -anu 2>/dev/null  | awk '{ print $4 }' | grep "$nameserver" | cut -d: -f2)
     nameserver="$nameserver:$ns_port"
   fi
 
@@ -51,17 +55,19 @@ setup_split_tunnel() {
 }
 
 download_servers() {
-  echo "Fetching Server List..."
+  log "Fetching ProtonVPN Server List..."
 
   #Filters by proton tier & enabled status and sort for fastest
   local filter=".LogicalServers | map(select(.Tier <= $PROTON_TIER and .Status == 1)) | sort_by(.Score)"
   su -s /bin/ash "$EXTERNAL_USER" -c \
     "wget -q -O- $PROTON_API_URL/vpn/logicals | jq \"$filter | $VPN_SERVER_FILTER\"" >"$PROTON_SERVER_FILE"
+
+  log "Found $(jq -r "length" "$PROTON_SERVER_FILE") servers."
 }
 
 generate_certificates() {
   if [[ ! -f "$OPENVPN_CA_FILE" ]] || [[ ! -f "$OPENVPN_TLS_CRYPT_FILE" ]]; then
-    echo "Downloading Certificates..."
+    log "Downloading ProtonVPN Certificates..."
 
     #Get ProtonVPN config by using first server
     local logical_id="$(jq -r ".[0].ID" "$PROTON_SERVER_FILE")"
@@ -78,7 +84,7 @@ generate_certificates() {
 
 kill_process() {
   if pgrep -x "$1" >/dev/null; then
-    echo "Stopping $1..."
+    log "Stopping $1..."
     pkill "$1"
 
     #wait until process is gone
@@ -116,11 +122,11 @@ wait_for_new_ip() {
 
     local old_ip_json="$(su -s /bin/ash "$EXTERNAL_USER" -c "$get_ip_cmd")"
     if [[ ! "$old_ip_json" ]]; then
-      echo "Failed to get old IP, skipping IP check."
+      log "Failed to get old IP, skipping IP check."
       return
     fi
 
-    echo "$old_ip_json" | jq -r "\"Old $format_ip\""
+    log "$(echo "$old_ip_json" | jq -r "\"Old $format_ip\"")"
     local old_ip=$(echo "$old_ip_json" | jq -r '.ip')
 
     local start=$(date +%s)
@@ -129,13 +135,13 @@ wait_for_new_ip() {
       local new_ip=$(echo "$ip_json" | jq -r '.ip')
 
       if [[ "$new_ip" ]] && [[ "$old_ip" != "$new_ip" ]]; then
-        echo "$ip_json" | jq -r "\"New $format_ip\""
+        log "$(echo "$ip_json" | jq -r "\"New $format_ip\"")"
         return
       fi
       sleep 1
     done
 
-    echo "Timed out waiting for IP change, reconnecting..."
+    log "Timed out waiting for IP change, reconnecting..."
     return 1
   fi
 }
@@ -149,7 +155,7 @@ connect() {
   local get_unique_ip_list="map({(.Servers[].EntryIP):1}) | add | keys_unsorted | .[:$VPN_SERVER_COUNT][]"
   local servers="$(jq -r "$get_unique_ip_list" "$PROTON_SERVER_FILE")"
 
-  echo "Connecting..."
+  log "Starting OpenVPN..."
 
   # shellcheck disable=SC2086
   openvpn \
@@ -164,9 +170,9 @@ connect() {
   #Set session timeout if reconnect enabled
   if [[ "$VPN_RECONNECT" ]]; then
     local timeout="$(get_timeout_seconds)"
-    local date="$(date @$(($(date +%s) + timeout)) 2>/dev/null)"
+    local date="$(date "+%Y-%m-%d %H:%M:%S" @$(($(date +%s) + timeout)) 2>/dev/null)"
 
-    echo "Reconnecting on $date ($timeout sec)"
+    log "Reconnecting on $date ($timeout sec)"
     sleep "$timeout" &
     local sleep_pid=$!
 
@@ -182,13 +188,13 @@ trap 'kill_process openvpn; kill_process tinyproxy; exit' TERM # gracefully shut
 
 if [[ "$VPN_KILL_SWITCH" -eq 1 ]]; then
   iptables-restore /etc/iptables/killswitch.rules
-  echo "Kill Switch enabled"
+  log "Kill Switch enabled"
 fi
 
 setup_split_tunnel
 
 if [[ "$HTTP_PROXY" -eq 1 ]]; then
-  echo "Starting Proxy..."
+  log "Starting Proxy..."
   tinyproxy -d &
 fi
 
