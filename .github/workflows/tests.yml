@@ -14,15 +14,14 @@ jobs:
           curl -s https://bashunit.typeddevs.com/install.sh | bash
       - name: Execute Tests
         continue-on-error: true
-        run: |
-          kcov --include-path=src /tmp ./lib/bashunit ./test --log-junit /tmp/TEST-bashunit.xml
+        run: kcov --include-path=src /tmp/coverage ./lib/bashunit ./test --log-junit /tmp/TEST-bashunit.xml
       - name: Upload ShellCheck Report
         uses: actions/upload-artifact@v4
         with:
           name: bashunit-report
           path: |
             /tmp/TEST-bashunit.xml
-            /tmp/**/cobertura.xml
+            /tmp/coverage/**/cobertura.xml
 
   lint:
     runs-on: ubuntu-latest
