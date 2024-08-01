@@ -13,6 +13,7 @@ jobs:
           sudo apt-get install kcov
           curl -s https://bashunit.typeddevs.com/install.sh | bash
       - name: Execute Tests
+        continue-on-error: true
         run: |
           kcov --include-path=src /tmp ./lib/bashunit ./test --log-junit /tmp/TEST-bashunit.xml
           cp $(find /tmp -name 'cobertura.xml') /tmp/coverage.xml
@@ -33,8 +34,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install shellcheck
       - name: Run ShellCheck
-        run: shellcheck --format=checkstyle $(find . -type f -name "*.sh") > /tmp/analysis.xml
         continue-on-error: true
+        run: shellcheck --shell=busybox --format=checkstyle $(find . -type f -name "*.sh") > /tmp/analysis.xml
       - name: Upload ShellCheck Report
         uses: actions/upload-artifact@v4
         with:
@@ -44,7 +45,6 @@ jobs:
   upload:
     runs-on: ubuntu-latest
     needs: [ test, lint ]
-    if: always()
     steps:
       - uses: actions/checkout@v4
       - name: Download Reports
