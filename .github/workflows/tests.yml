@@ -1,58 +1,31 @@
-name: Lint & Test
+name: Test
 
 on: [ push, pull_request, workflow_dispatch ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - name: Install kcov & bashunit
+      - name: Install kcov & shellspec
         run: |
           sudo apt-get update
           sudo apt-get install kcov
-          curl -s https://bashunit.typeddevs.com/install.sh | bash
-      - name: Execute Tests
-        continue-on-error: true
-        run: kcov --include-path=src --bash-method=DEBUG /tmp ./lib/bashunit ./test --log-junit /tmp/TEST-bashunit.xml
-      - name: Upload ShellCheck Report
-        uses: actions/upload-artifact@v4
+          curl -fsSL https://git.io/shellspec | sh -s 0.28.1 --yes
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Run shellspec with coverage
+        run: shellspec -s "sh" -o junit --kcov
+      - name: Publish Coverage
+        uses: codacy/codacy-coverage-reporter-action@v1
+        if: always()
         with:
-          name: bashunit-report
-          path: |
-            /tmp/TEST-bashunit.xml
-            /tmp/bashunit/cobertura.xml
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install ShellCheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install shellcheck
-      - name: Run ShellCheck
-        continue-on-error: true
-        run: shellcheck --shell=busybox --format=checkstyle $(find . -type f -name "*.sh") > /tmp/analysis.xml
-      - name: Upload ShellCheck Report
-        uses: actions/upload-artifact@v4
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: coverage/cobertura.xml
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
         with:
-          name: shellcheck-report
-          path: /tmp/analysis.xml
-
-  upload:
-    runs-on: ubuntu-latest
-    needs: [ test, lint ]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download Reports
-        uses: actions/download-artifact@v4
-        with:
-          path: test/reports
-          merge-multiple: true
-      - name: Testspace client install & config
-        uses: testspace-com/setup-testspace@v1
-        with:
-          domain: ${{github.repository_owner}}
-      - name: Push results to Testspace
-        run: testspace test/reports/*.xml{test}
+          files: report/results_junit.xml
