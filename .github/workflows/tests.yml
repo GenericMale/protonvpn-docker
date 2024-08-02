@@ -13,11 +13,13 @@ jobs:
       - name: Install kcov & shellspec
         run: |
           sudo apt-get update
-          sudo apt-get install kcov
+          sudo apt-get install kcov busybox
           curl -fsSL https://git.io/shellspec | sh -s 0.28.1 --yes
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Run shellspec with coverage
-        run: shellspec -s "sh" -o junit --kcov
+      - name: Run tests with coverage
+        run: shellspec -s "bash" --kcov
+      - name: Run tests on busybox
+        run: shellspec -s "busybox ash" -o junit
       - name: Publish Coverage
         uses: codacy/codacy-coverage-reporter-action@v1
         if: always()
