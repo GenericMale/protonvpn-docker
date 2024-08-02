@@ -43,7 +43,7 @@ jobs:
           ✘ $((${{ fromJSON(steps.test-results.outputs.json).stats.tests_fail }} + ${{ fromJSON(steps.test-results.outputs.json).stats.tests_error }})) | \
           ➟ ${{ fromJSON(steps.test-results.outputs.json).stats.tests_skip }}\" >> \"$GITHUB_OUTPUT\""
       - name: Create Awesome Badge
-        uses: schneegans/dynamic-badges-action@v1
+        uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: ${{ env.TEST_BADGE_GIST_ID }}
