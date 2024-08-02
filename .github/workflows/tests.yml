@@ -2,6 +2,10 @@ name: Test
 
 on: [ push, pull_request, workflow_dispatch ]
 
+env:
+  TEST_BADGE_GIST_ID: d11c7cec7a928d0f605db3682ad2678c
+  TEST_BADGE_GIST_FILE: test-badge.json
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -28,6 +32,22 @@ jobs:
           coverage-reports: coverage/cobertura.xml
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
+        id: test-results
         if: always()
         with:
           files: report/results_junit.xml
+      - name: Create Test Badge Label
+        id: test-badge
+        run: "echo \"label=\
+          ✔ ${{ fromJSON(steps.test-results.outputs.json).stats.tests_succ }} | \
+          ✘ $((${{ fromJSON(steps.test-results.outputs.json).stats.tests_fail }} + ${{ fromJSON(steps.test-results.outputs.json).stats.tests_error }})) | \
+          ➟ ${{ fromJSON(steps.test-results.outputs.json).stats.tests_skip }}\" >> \"$GITHUB_OUTPUT\""
+      - name: Create Awesome Badge
+        uses: schneegans/dynamic-badges-action@v1
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ env.TEST_BADGE_GIST_ID }}
+          filename: ${{ env.TEST_BADGE_GIST_FILE }}
+          label: ${{ steps.test-badge.outputs.label }}
+          message: tests
+          color: ${{ fromJSON(steps.test-results.outputs.json).conclusion == 'success' && 'brightgreen' || 'red' }}
