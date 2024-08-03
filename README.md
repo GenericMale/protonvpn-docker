@@ -25,15 +25,15 @@ This Docker image provides a lightweight and secure solution to connect your con
 1. **Obtain OpenVPN Credentials:** Get your credentials from your ProtonVPN
    account: [https://account.proton.me/u/0/vpn/OpenVpnIKEv2](https://account.proton.me/u/0/vpn/OpenVpnIKEv2).
 2. **Configure Credentials:** Choose one of the following methods:
-    - **Secrets File:** Create a file containing your username and password on separate lines. Set
-      the `AUTH_USER_PASS_FILE` environment variable to the file path.
-    - **Environment Variables:** Define the `OPENVPN_USER` and `OPENVPN_PASS` environment variables with your
-      credentials.
+   - **Secrets File:** Create a file containing your username and password on separate lines. Set
+     the `AUTH_USER_PASS_FILE` environment variable to the file path.
+   - **Environment Variables:** Define the `OPENVPN_USER` and `OPENVPN_PASS` environment variables with your
+     credentials.
 3. **Connect Containers and/or Enable HTTP Proxy:**
-    - **VPN Access:** Use the `network_mode: service:protonvpn` option in your Docker Compose configuration for
-      containers requiring VPN protection.
-    - **HTTP Proxy:** Set the `HTTP_PROXY` environment variable to `1` and map port `3128` to use the VPN in any
-      application with HTTP(S) proxy support.
+   - **VPN Access:** Use the `network_mode: service:protonvpn` option in your Docker Compose configuration for
+     containers requiring VPN protection.
+   - **HTTP Proxy:** Set the `HTTP_PROXY` environment variable to `1` and map port `3128` to use the VPN in any
+     application with HTTP(S) proxy support.
 
 **Important Note on Port Mapping:**
 Since containers share the network stack when using `network_mode`, the port mappings for services requiring external
