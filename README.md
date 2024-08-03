@@ -2,7 +2,10 @@
 
 [![](https://img.shields.io/github/license/GenericMale/protonvpn-docker?logo=github)](https://github.com/GenericMale/protonvpn-docker/blob/main/LICENSE)
 [![](https://img.shields.io/github/last-commit/genericmale/protonvpn-docker?label=commit&logo=github)](https://github.com/GenericMale/protonvpn-docker)
-[![](https://img.shields.io/github/actions/workflow/status/genericmale/protonvpn-docker/docker-publish.yml?label=build&logo=githubactions&logoColor=white)](https://github.com/GenericMale/protonvpn-docker/actions/workflows/docker-publish.yml)
+[![](https://img.shields.io/github/actions/workflow/status/genericmale/protonvpn-docker/docker-publish.yml?label=build&logo=github)](https://github.com/GenericMale/protonvpn-docker/actions/workflows/docker-publish.yml)
+[![](https://img.shields.io/endpoint?logo=github&url=https%3A%2F%2Fgist.githubusercontent.com%2FGenericMale%2Fd11c7cec7a928d0f605db3682ad2678c%2Fraw%2Ftest-badge.json)](https://github.com/GenericMale/protonvpn-docker/actions/workflows/tests.yml)
+[![](https://img.shields.io/codacy/coverage/476317284931429ca1c0c827da1ae846?logo=codacy)](https://app.codacy.com/gh/GenericMale/protonvpn-docker/coverage/dashboard)
+[![](https://img.shields.io/codacy/grade/476317284931429ca1c0c827da1ae846?logo=codacy)](https://app.codacy.com/gh/GenericMale/protonvpn-docker/dashboard)
 [![](https://img.shields.io/docker/v/genericmale/protonvpn?logo=docker&logoColor=white)](https://hub.docker.com/r/genericmale/protonvpn/tags)
 [![](https://img.shields.io/docker/image-size/genericmale/protonvpn?label=size&logo=docker&logoColor=white)](https://hub.docker.com/r/genericmale/protonvpn/tags)
 
