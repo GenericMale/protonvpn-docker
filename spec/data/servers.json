@@ -1,0 +1,47 @@
+[
+  {
+    "Name": "TEST#69",
+    "EntryCountry": "EN",
+    "ExitCountry": "EX",
+    "Domain": "test.protonvpn.net",
+    "Tier": 2,
+    "Features": 1,
+    "Region": null,
+    "City": null,
+    "Score": 6.9,
+    "HostCountry": null,
+    "ID": "t8keuXnISq3I8ktLD2jjjg3oqiMAliWbbbcBVOh7erM8rQgR3wfL9wk_UD_G66cRF_Oa5JPpTo9-YWz5MCZxPA==",
+    "Location": {
+      "Lat": 69.69,
+      "Long": 96.96
+    },
+    "Status": 1,
+    "Servers": [
+      {
+        "EntryIP": "127.0.0.1",
+        "ExitIP": "127.0.0.1",
+        "Domain": "test-1.protonvpn.net",
+        "ID": "TEST_SERVER_1",
+        "Label": "",
+        "X25519PublicKey": "X25519PublicKey_1",
+        "Generation": 0,
+        "Status": 1,
+        "ServicesDown": 0,
+        "ServicesDownReason": null
+      },
+      {
+        "EntryIP": "127.0.0.2",
+        "ExitIP": "127.0.0.2",
+        "Domain": "test-2.protonvpn.net",
+        "ID": "TEST_SERVER_2",
+        "Label": "",
+        "X25519PublicKey": "X25519PublicKey_2",
+        "Generation": 0,
+        "Status": 1,
+        "ServicesDown": 0,
+        "ServicesDownReason": null
+      }
+    ],
+    "Load": 69
+  }
+]

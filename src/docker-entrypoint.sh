@@ -23,14 +23,19 @@
 
 : "${HTTP_PROXY:=0}" #Start proxy server
 
-#Create auth file from credentials if it doesn't exist
-if [[ ! -f "$OPENVPN_USER_PASS_FILE" ]]; then
-  echo "$OPENVPN_USER" >"$OPENVPN_USER_PASS_FILE"
-  echo "$OPENVPN_PASS" >>"$OPENVPN_USER_PASS_FILE"
-fi
-
 log() {
   echo "$(date "+%Y-%m-%d %H:%M:%S") $1"
+}
+
+run_as_external() {
+  su -s /bin/sh "$EXTERNAL_USER" -c "$1"
+}
+
+create_user_pass_file() {
+  if [[ ! -f "$OPENVPN_USER_PASS_FILE" ]]; then
+    echo "$OPENVPN_USER" >"$OPENVPN_USER_PASS_FILE"
+    echo "$OPENVPN_PASS" >>"$OPENVPN_USER_PASS_FILE"
+  fi
 }
 
 setup_split_tunnel() {
@@ -39,7 +44,7 @@ setup_split_tunnel() {
   local nameserver=$(grep -m 1 '^nameserver' /etc/resolv.conf | cut -d' ' -f2)
   if [[ "$nameserver" == "127.0.0.11" ]]; then
     #docker internal DNS has a random port
-    local ns_port=$(netstat -anu 2>/dev/null  | awk '{ print $4 }' | grep "$nameserver" | cut -d: -f2)
+    local ns_port=$(netstat -anu 2>/dev/null | awk '{ print $4 }' | grep "$nameserver" | cut -d: -f2)
     nameserver="$nameserver:$ns_port"
   fi
 
@@ -59,10 +64,11 @@ download_servers() {
 
   #Filters by proton tier & enabled status and sort for fastest
   local filter=".LogicalServers | map(select(.Tier <= $PROTON_TIER and .Status == 1)) | sort_by(.Score)"
-  su -s /bin/ash "$EXTERNAL_USER" -c \
-    "wget -q -O- $PROTON_API_URL/vpn/logicals | jq \"$filter | $VPN_SERVER_FILTER\"" >"$PROTON_SERVER_FILE"
+  run_as_external "wget -q -O- $PROTON_API_URL/vpn/logicals | jq \"$filter | $VPN_SERVER_FILTER\"" >"$PROTON_SERVER_FILE"
 
-  log "Found $(jq -r "length" "$PROTON_SERVER_FILE") servers."
+  [[ -s "$PROTON_SERVER_FILE" ]] &&
+    log "Found $(jq -r "length" "$PROTON_SERVER_FILE") servers." ||
+    >&2 log "No servers found!"
 }
 
 generate_certificates() {
@@ -72,13 +78,16 @@ generate_certificates() {
     #Get ProtonVPN config by using first server
     local logical_id="$(jq -r ".[0].ID" "$PROTON_SERVER_FILE")"
     local openvpn_config="$(
-      su -s /bin/ash "$EXTERNAL_USER" -c \
-        "wget -q -O- \"$PROTON_API_URL/vpn/config?Platform=Linux&Protocol=udp&LogicalID=$logical_id\""
+      run_as_external "wget -q -O- \"$PROTON_API_URL/vpn/config?Platform=Linux&Protocol=udp&LogicalID=$logical_id\""
     )"
 
-    #Extract CA cert & TLS key from config
-    echo "$openvpn_config" | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' >"$OPENVPN_CA_FILE"
-    echo "$openvpn_config" | sed -n '/BEGIN OpenVPN Static key/,/END OpenVPN Static key/p' >"$OPENVPN_TLS_CRYPT_FILE"
+    if [[ "$openvpn_config" ]]; then
+      #Extract CA cert & TLS key from config
+      echo "$openvpn_config" | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' >"$OPENVPN_CA_FILE"
+      echo "$openvpn_config" | sed -n '/BEGIN OpenVPN Static key/,/END OpenVPN Static key/p' >"$OPENVPN_TLS_CRYPT_FILE"
+    else
+      >&2 log "Failed to download certificates!"
+    fi
   fi
 }
 
@@ -120,9 +129,9 @@ wait_for_new_ip() {
     local get_ip_cmd="wget -T 3 -q -O- $IP_CHECK_URL 2>/dev/null"
     local format_ip="IP: \(.ip) \(.country) (\(.asn_org // .asn // .hostname))"
 
-    local old_ip_json="$(su -s /bin/ash "$EXTERNAL_USER" -c "$get_ip_cmd")"
+    local old_ip_json="$(run_as_external "$get_ip_cmd")"
     if [[ ! "$old_ip_json" ]]; then
-      log "Failed to get old IP, skipping IP check."
+      >&2 log "Failed to get old IP, skipping IP check."
       return
     fi
 
@@ -131,7 +140,7 @@ wait_for_new_ip() {
 
     local start=$(date +%s)
     while [[ "$CONNECT_TIMEOUT" -ge $(($(date +%s) - start)) ]]; do
-      local ip_json=$(su -s /bin/ash -c "$get_ip_cmd")
+      local ip_json=$(eval "$get_ip_cmd")
       local new_ip=$(echo "$ip_json" | jq -r '.ip')
 
       if [[ "$new_ip" ]] && [[ "$old_ip" != "$new_ip" ]]; then
@@ -141,21 +150,15 @@ wait_for_new_ip() {
       sleep 1
     done
 
-    log "Timed out waiting for IP change, reconnecting..."
+    >&2 log "Timed out waiting for IP change, reconnecting..."
     return 1
   fi
 }
 
-connect() {
-  download_servers
-  generate_certificates
-  kill_process openvpn
-
+start_openvpn() {
   #Get Server IPs, remove duplicates and limit number of results.
   local get_unique_ip_list="map({(.Servers[].EntryIP):1}) | add | keys_unsorted | .[:$VPN_SERVER_COUNT][]"
   local servers="$(jq -r "$get_unique_ip_list" "$PROTON_SERVER_FILE")"
-
-  log "Starting OpenVPN..."
 
   # shellcheck disable=SC2086
   openvpn \
@@ -164,7 +167,17 @@ connect() {
     --remote ${servers//$'\n'/' --remote '} \
     $OPENVPN_EXTRA_ARGS &
 
-  local openvpn_pid=$!
+  echo $!
+}
+
+connect() {
+  download_servers
+  generate_certificates
+  kill_process openvpn
+
+  log "Starting OpenVPN..."
+  local openvpn_pid=$(start_openvpn)
+
   if ! wait_for_new_ip; then return; fi
 
   #Set session timeout if reconnect enabled
@@ -176,13 +189,16 @@ connect() {
     sleep "$timeout" &
     local sleep_pid=$!
 
-    wait_any $openvpn_pid $sleep_pid
+    wait_any "$openvpn_pid" "$sleep_pid"
     kill $sleep_pid 2>/dev/null # clean up the sleep when openvpn has died
   else
     #Just wait until OpenVPN is terminated
-    wait $openvpn_pid
+    wait "$openvpn_pid"
   fi
 }
+
+#https://github.com/shellspec/shellspec?tab=readme-ov-file#testing-shell-functions
+${__SOURCED__:+return}
 
 trap 'kill_process openvpn; kill_process tinyproxy; exit' TERM # gracefully shutdown on SIGTERM
 
@@ -192,6 +208,7 @@ if [[ "$VPN_KILL_SWITCH" -eq 1 ]]; then
 fi
 
 setup_split_tunnel
+create_user_pass_file
 
 if [[ "$HTTP_PROXY" -eq 1 ]]; then
   log "Starting Proxy..."
