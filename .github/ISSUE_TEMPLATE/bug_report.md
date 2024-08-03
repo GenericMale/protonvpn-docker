@@ -23,9 +23,10 @@ If applicable, add your docker compose file.
 Add your docker logs to help explain the problem.
 
 **Environment (please complete the following information):**
- - Docker Version: [e.g. 27.0.3]
- - Host OS: [e.g. Arch Linux]
- - Other Container Versions: [e.g. httpd:2.4.62 ]
+
+- Docker Version: \[e.g. 27.0.3\]
+- Host OS: \[e.g. Arch Linux\]
+- Other Container Versions: \[e.g. httpd:2.4.62\]
 
 **Additional context**
 Add any other context about the problem here.

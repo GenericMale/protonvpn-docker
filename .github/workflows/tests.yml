@@ -1,6 +1,11 @@
 name: Test
 
-on: [ push, pull_request, workflow_dispatch ]
+on:
+  push:
+    paths: [ 'src/**', 'spec/**' ]
+  pull_request:
+    paths: [ 'src/**', 'spec/**' ]
+  workflow_dispatch:
 
 env:
   TEST_BADGE_GIST_ID: d11c7cec7a928d0f605db3682ad2678c

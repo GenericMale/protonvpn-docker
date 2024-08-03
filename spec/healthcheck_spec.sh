@@ -1,3 +1,5 @@
+#shellcheck shell=sh
+
 Describe "healthcheck.sh"
   It "fails when tun device doesn't exist"
     ip() {
