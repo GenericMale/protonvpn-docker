@@ -1,4 +1,4 @@
-#shellcheck shell=sh disable=SC2034
+#shellcheck shell=sh disable=SC2034,SC2317
 
 Describe "docker-entrypoint.sh"
   DATA="./spec/data"
@@ -96,9 +96,9 @@ Describe "docker-entrypoint.sh"
   End
 
   Describe "wait_for_new_ip"
+    CONNECT_TIMEOUT=1
     It "continues when IP changed"
-      wget() { echo '{"ip": "'$RANDOM'", "country": "TestCountry", "asn": "TestProvider"}'; }
-
+      wget() { echo '{"ip": "'"$RANDOM"'", "country": "TestCountry", "asn": "TestProvider"}'; }
       When call wait_for_new_ip
       The status should be success
       The line 1 of stdout should match pattern "* Old IP: * TestCountry (TestProvider)"
@@ -106,7 +106,7 @@ Describe "docker-entrypoint.sh"
     End
 
     It "times out"
-      CONNECT_TIMEOUT=1
+      wget() { echo '{"ip": "1.2.3.4", "country": "TestCountry", "asn": "TestProvider"}'; }
       When call wait_for_new_ip
       The status should be failure
       The stdout should match pattern "* Old IP: * * (*)"
