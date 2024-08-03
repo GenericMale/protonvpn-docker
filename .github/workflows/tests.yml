@@ -43,11 +43,9 @@ jobs:
           succ=${{fromJSON(steps.test-results.outputs.json).stats.tests_succ}}
           fail=$((${{fromJSON(steps.test-results.outputs.json).stats.tests_fail}} + ${{fromJSON(steps.test-results.outputs.json).stats.tests_error}}))
           skip=${{fromJSON(steps.test-results.outputs.json).stats.tests_skip}}
-          
           message="$([[ $succ -gt 0 ]] && echo "✔ $succ | ")$([[ $fail -gt 0 ]] && echo "✘ $fail | ")$([[ $skip -gt 0 ]] && echo "➟ $skip | ")"
-          echo "message=$([[ $tests -eq 0 ]] && echo "no tests" || echo "${message::-3}")" >> $GITHUB_OUTPUT
-          
           color="$(([[ $fail -gt 0 ]] && echo "red") || ([[ $succ -eq 0 ]] && echo "yellow") || ([[ $skip -gt 0 ]] && echo "green") || echo "brightgreen")"
+          echo "message=$([[ $tests -eq 0 ]] && echo "no tests" || echo "${message::-3}")" >> $GITHUB_OUTPUT
           echo "color=$color" >> $GITHUB_OUTPUT
       - name: Update Test Badge Gist
         uses: schneegans/dynamic-badges-action@v1.7.0
