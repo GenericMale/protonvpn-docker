@@ -36,18 +36,25 @@ jobs:
         if: always()
         with:
           files: report/results_junit.xml
-      - name: Create Test Badge Label
+      - name: Generate Test Badge Data
         id: test-badge
-        run: "echo \"label=\
-          ✔ ${{ fromJSON(steps.test-results.outputs.json).stats.tests_succ }} | \
-          ✘ $((${{ fromJSON(steps.test-results.outputs.json).stats.tests_fail }} + ${{ fromJSON(steps.test-results.outputs.json).stats.tests_error }})) | \
-          ➟ ${{ fromJSON(steps.test-results.outputs.json).stats.tests_skip }}\" >> \"$GITHUB_OUTPUT\""
-      - name: Create Awesome Badge
+        run: |
+          tests=${{fromJSON(steps.test-results.outputs.json).stats.tests}}
+          succ=${{fromJSON(steps.test-results.outputs.json).stats.tests_succ}}
+          fail=$((${{fromJSON(steps.test-results.outputs.json).stats.tests_fail}} + ${{fromJSON(steps.test-results.outputs.json).stats.tests_error}}))
+          skip=${{fromJSON(steps.test-results.outputs.json).stats.tests_skip}}
+          
+          message="$([[ $succ -gt 0 ]] && echo "✔ $succ | ")$([[ $fail -gt 0 ]] && echo "✘ $fail | ")$([[ $skip -gt 0 ]] && echo "➟ $skip | ")"
+          echo "message=$([[ $tests -eq 0 ]] && echo "no tests" || echo "${message::-3}")" >> "$GITHUB_OUTPUT"
+          
+          color="$(([[ $fail -gt 0 ]] && echo "red") || ([[ $passed -eq 0 ]] && echo "yellow") || ([[ $skipped -gt 0 ]] && echo "green") || echo "brightgreen")"
+          echo "color=$color" >> "$GITHUB_OUTPUT"
+      - name: Update Test Badge Gist
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: ${{ env.TEST_BADGE_GIST_ID }}
           filename: ${{ env.TEST_BADGE_GIST_FILE }}
-          label: ${{ steps.test-badge.outputs.label }}
-          message: tests
-          color: ${{ fromJSON(steps.test-results.outputs.json).conclusion == 'success' && 'brightgreen' || 'red' }}
+          label: tests
+          message: ${{ steps.test-badge.outputs.message }}
+          color: ${{ steps.test-badge.outputs.color }}
