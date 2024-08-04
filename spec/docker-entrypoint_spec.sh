@@ -13,6 +13,7 @@ Describe "docker-entrypoint.sh"
 
     It "finds servers"
       When call download_servers
+      The status should be success
       The line 1 of stdout should end with "Fetching ProtonVPN Server List..."
       The line 2 of stdout should match pattern "* Found ???? servers."
       The file $PROTON_SERVER_FILE should not be empty file
@@ -21,18 +22,21 @@ Describe "docker-entrypoint.sh"
     It "applies filters"
       VPN_SERVER_FILTER='map(select(.Name == \"GR#3\"))'
       When call download_servers
+      The status should be success
       The line 2 of stdout should match pattern "* Found 1 servers."
     End
 
     It "filters by proton tier"
       PROTON_TIER=0
       When call download_servers
+      The status should be success
       The line 2 of stdout should match pattern "* Found ?? servers."
     End
 
     It "fails gracefully with invalid url"
       PROTON_API_URL="https://invalid-api-url"
       When call download_servers
+      The status should be failure
       The stdout should end with "Fetching ProtonVPN Server List..."
       The stderr should end with "No servers found!"
       The file $PROTON_SERVER_FILE should be empty file
@@ -46,6 +50,7 @@ Describe "docker-entrypoint.sh"
 
     It "downloads ca & tls-crypt files"
       When call generate_certificates
+      The status should be success
       The stdout should end with "Downloading ProtonVPN Certificates..."
       The contents of file $OPENVPN_CA_FILE should start with "-----BEGIN CERTIFICATE-----"
       The contents of file $OPENVPN_TLS_CRYPT_FILE should start with "-----BEGIN OpenVPN Static key V1-----"
@@ -55,12 +60,14 @@ Describe "docker-entrypoint.sh"
       OPENVPN_CA_FILE="$DATA/ca.crt"
       OPENVPN_TLS_CRYPT_FILE="$DATA/ta.key"
       When call generate_certificates
+      The status should be success
       The stdout should not end with "Downloading ProtonVPN Certificates..."
     End
 
     It "fails gracefully with invalid url"
       PROTON_API_URL="https://invalid-api-url"
       When call generate_certificates
+      The status should be failure
       The stdout should end with "Downloading ProtonVPN Certificates..."
       The stderr should end with "Failed to download certificates!"
       The file $OPENVPN_CA_FILE should not be exist
@@ -76,6 +83,7 @@ Describe "docker-entrypoint.sh"
 
     It "executes with config and filtered servers"
       When call start_openvpn
+      The status should be success
       The stderr should equal "--config $OPENVPN_CONFIG_FILE --auth-user-pass $OPENVPN_USER_PASS_FILE --remote 127.0.0.1"
       The stdout should equal $!
     End
@@ -83,6 +91,7 @@ Describe "docker-entrypoint.sh"
     It "accepts server count"
       VPN_SERVER_COUNT=2
       When call start_openvpn
+      The status should be success
       The stderr should end with "--remote 127.0.0.1 --remote 127.0.0.2"
       The stdout should equal $!
     End
@@ -111,6 +120,76 @@ Describe "docker-entrypoint.sh"
       The status should be failure
       The stdout should match pattern "* Old IP: * * (*)"
       The stderr should end with "Timed out waiting for IP change, reconnecting..."
+    End
+
+    It "skips if URL not set"
+      IP_CHECK_URL=
+      When call wait_for_new_ip
+      The status should be success
+      The stdout should not include "Old IP"
+    End
+  End
+
+  Describe "wait_for_reconnect"
+    wait() { return; }
+    sleep() { return; }
+    kill() { return 1; }
+
+    It "doesn't wait if reconnect not set"
+      When call wait_for_reconnect
+      The status should be success
+      The stdout should not include "Reconnecting on"
+    End
+
+    Describe "waits until"
+      Parameters
+        "00:00:00" "00:00:00" "*"
+        "05:55" "05:55:00" "*"
+        "23:59:59" "23:59:59" "*"
+        "10" "*" "10"
+        "20s" "*" "20"
+        "20m" "*" "$((20 * 60))"
+        "48h" "*" "$((48 * 60 * 60))"
+        "6d" "*" "$((6 * 24 * 60 * 60))"
+        "5d 5h 20m 12s" "*" "$((5 * 24 * 60 * 60 + 5 * 60 * 60 + 20 * 60 + 12))"
+      End
+      Example "$1"
+        VPN_RECONNECT="$1"
+        When call wait_for_reconnect
+        The status should be success
+        The stdout should match pattern "* Reconnecting on ????-??-?? $2 ($3 sec)"
+      End
+    End
+  End
+
+  Describe "setup_split_tunnel"
+    RESOLVER_CONFIG="$DATA/resolv.conf"
+    EXTERNAL_USER="testuser"
+    gateway="137.137.137.137"
+    nsport="69696"
+
+    iptables() { >&2 echo "iptables $*"; }
+    ip() {
+      >&2 echo "ip $*"
+      [[ "$*" == "route" ]] && echo "default via $gateway dev eth0"
+    }
+    netstat() {
+      echo "Active Internet connections (servers and established)
+            Proto Recv-Q Send-Q Local Address
+            udp        0      0 0.0.0.0:11111
+            udp        0      0 127.0.0.11:$nsport"
+    }
+
+    It "should configure iptables"
+      When call setup_split_tunnel
+      The status should be success
+      The line 1 of stderr should equal "ip route"
+      The line 2 of stderr should equal "iptables -t mangle -A OUTPUT -m owner --uid-owner $EXTERNAL_USER -j MARK --set-mark 1"
+      The line 3 of stderr should equal "iptables -A OUTPUT -m mark --mark 1 -j ACCEPT"
+      The line 4 of stderr should equal "ip rule add fwmark 1 table 1"
+      The line 5 of stderr should equal "ip route add default via $gateway table 1"
+      The line 6 of stderr should equal "iptables -t nat -A OUTPUT -m mark --mark 1 -p udp --dport 53 -j DNAT --to-destination 127.0.0.11:$nsport"
+      The line 7 of stderr should equal "iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE"
     End
   End
 End
