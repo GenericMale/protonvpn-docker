@@ -8,6 +8,10 @@ Describe "docker-entrypoint.sh"
   Include "src/docker-entrypoint.sh"
   run_as_external() { eval "$1"; }
 
+  process_killed() {
+    pkill -0 "$1" && return 1 || return 0
+  }
+
   Describe "download_servers"
     PROTON_SERVER_FILE="$TMP/servers.json"
 
@@ -128,6 +132,13 @@ Describe "docker-entrypoint.sh"
       The status should be success
       The stdout should not include "Old IP"
     End
+
+    It "skips if URL invalid"
+      IP_CHECK_URL="https://invalid-api-url"
+      When call wait_for_new_ip
+      The status should be failure
+      The stderr should end with "Failed to get old IP, skipping IP check."
+    End
   End
 
   Describe "wait_for_reconnect"
@@ -190,6 +201,67 @@ Describe "docker-entrypoint.sh"
       The line 5 of stderr should equal "ip route add default via $gateway table 1"
       The line 6 of stderr should equal "iptables -t nat -A OUTPUT -m mark --mark 1 -p udp --dport 53 -j DNAT --to-destination 127.0.0.11:$nsport"
       The line 7 of stderr should equal "iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE"
+    End
+  End
+
+  Describe "create_user_pass_file"
+    OPENVPN_USER="new_test_user"
+    OPENVPN_PASS="new_test_pass"
+
+    It "should write user & pass to file if it doesn't exist"
+      OPENVPN_USER_PASS_FILE="$TMP/test.auth"
+      When call create_user_pass_file
+      The status should be success
+      The contents of file $OPENVPN_USER_PASS_FILE should equal $OPENVPN_USER$'\n'$OPENVPN_PASS
+    End
+
+    It "should not overwrite if file already exists"
+      OPENVPN_USER_PASS_FILE="$DATA/userpass.auth"
+      When call create_user_pass_file
+      The status should be success
+      The contents of file $OPENVPN_USER_PASS_FILE should equal $'test_user\ntest_pass'
+    End
+  End
+
+  Describe "kill_process"
+    It "should return when process not active"
+      When call kill_process "invalid_process"
+      The status should be success
+    End
+    It "should kill process if running"
+      sleep_kill() {
+        timeout 10 sleep 10 &
+        kill_process timeout
+      }
+      When call sleep_kill
+      The status should be success
+      The stdout should end with "Stopping timeout..."
+      Assert process_killed timeout
+    End
+  End
+
+  Describe "main"
+    mock() {
+      for func in iptables-restore iptables ip tinyproxy openvpn wait wget wait_for_new_ip
+        do eval "$func(){ :; }"; done #noop
+      i=0; true() { return $((i++)); } #make main loop run just once
+    }
+    BeforeAll mock
+    It "does everything in order"
+      OPENVPN_USER_PASS_FILE="$TMP/test.auth"
+      PROTON_SERVER_FILE="$TMP/servers.json"
+      OPENVPN_CA_FILE="$TMP/ca.crt"
+      OPENVPN_TLS_CRYPT_FILE="$TMP/ta.key"
+      HTTP_PROXY=1
+      When call main
+      The status should be success
+      The line 1 of stdout should end with "Kill Switch enabled"
+      The line 2 of stdout should end with "Starting Proxy..."
+      The line 3 of stdout should end with "Fetching ProtonVPN Server List..."
+      The line 4 of stdout should end with "Downloading ProtonVPN Certificates..."
+      The line 5 of stdout should end with "Starting OpenVPN..."
+      The line 1 of stderr should end with "No servers found!"
+      The line 2 of stderr should end with "Failed to download certificates!"
     End
   End
 End

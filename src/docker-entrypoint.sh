@@ -1,5 +1,6 @@
 #!/bin/ash
 # shellcheck disable=SC2155
+[[ "$DEBUG" == "true" ]] && set -x
 
 : "${VPN_SERVER_COUNT:=1}"  #How many of the fastest servers to rotate
 : "${VPN_SERVER_FILTER:=.}" #Additional jq filter to apply to server list
@@ -28,7 +29,7 @@ log() { echo "$(date "+%Y-%m-%d %H:%M:%S") $1"; }
 run_as_external() { su -s /bin/sh "$EXTERNAL_USER" -c "$1"; }
 
 create_user_pass_file() {
-  if [[ -f "$OPENVPN_USER_PASS_FILE" ]]; then return; fi
+  if [[ -f "$OPENVPN_USER_PASS_FILE" ]]; then return 0; fi
   echo "$OPENVPN_USER" >"$OPENVPN_USER_PASS_FILE"
   echo "$OPENVPN_PASS" >>"$OPENVPN_USER_PASS_FILE"
 }
@@ -70,7 +71,7 @@ download_servers() {
 }
 
 generate_certificates() {
-  if [[ -f "$OPENVPN_CA_FILE" ]] && [[ -f "$OPENVPN_TLS_CRYPT_FILE" ]]; then return; fi
+  if [[ -f "$OPENVPN_CA_FILE" ]] && [[ -f "$OPENVPN_TLS_CRYPT_FILE" ]]; then return 0; fi
 
   log "Downloading ProtonVPN Certificates..."
 
@@ -90,14 +91,15 @@ generate_certificates() {
   fi
 }
 
+# shellcheck disable=SC2086
 kill_process() {
-  if ! pgrep -x "$1" >/dev/null; then return; fi
+  local pids=$(pgrep -x "$1" | tr '\n' ' ')
+  if [[ ! "$pids" ]]; then return 0; fi
 
   log "Stopping $1..."
-  pkill "$1"
-
-  #wait until process is gone
-  while pgrep -x "$1" >/dev/null; do sleep 1; done
+  kill $pids
+  wait $pids
+  return 0
 }
 
 wait_for_reconnect() {
@@ -105,7 +107,7 @@ wait_for_reconnect() {
   if [[ ! "$VPN_RECONNECT" ]]; then
     #Just wait until OpenVPN is terminated
     wait "$openvpn_pid"
-    return
+    return 0
   fi
 
   if [[ "$VPN_RECONNECT" == *":"* ]]; then
@@ -140,7 +142,7 @@ wait_any() {
 }
 
 wait_for_new_ip() {
-  if [[ ! "$IP_CHECK_URL" ]]; then return; fi
+  if [[ ! "$IP_CHECK_URL" ]]; then return 0; fi
 
   local get_ip_cmd="wget -T 3 -q -O- $IP_CHECK_URL 2>/dev/null"
   local format_ip="IP: \(.ip) \(.country) (\(.asn_org // .asn // .hostname))"
@@ -148,7 +150,7 @@ wait_for_new_ip() {
   local old_ip_json="$(run_as_external "$get_ip_cmd")"
   if [[ ! "$old_ip_json" ]]; then
     log >&2 "Failed to get old IP, skipping IP check."
-    return
+    return 1
   fi
 
   log "$(echo "$old_ip_json" | jq -r "\"Old $format_ip\"")"
@@ -161,7 +163,7 @@ wait_for_new_ip() {
 
     if [[ "$new_ip" ]] && [[ "$old_ip" != "$new_ip" ]]; then
       log "$(echo "$ip_json" | jq -r "\"New $format_ip\"")"
-      return
+      return 0
     fi
     sleep 1
   done
@@ -181,8 +183,6 @@ start_openvpn() {
     --auth-user-pass "$OPENVPN_USER_PASS_FILE" \
     --remote ${servers//$'\n'/' --remote '} \
     $OPENVPN_EXTRA_ARGS &
-
-  echo $!
 }
 
 main() {
@@ -205,7 +205,8 @@ main() {
     kill_process openvpn
 
     log "Starting OpenVPN..."
-    local openvpn_pid=$(start_openvpn)
+    start_openvpn
+    local openvpn_pid=$!
 
     if wait_for_new_ip; then
       wait_for_reconnect "$openvpn_pid"
