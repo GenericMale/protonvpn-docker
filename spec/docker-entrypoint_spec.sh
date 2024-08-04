@@ -166,6 +166,7 @@ Describe "docker-entrypoint.sh"
     End
 
     It "waits only until provided process terminates"
+      Skip if "wait -n not available in ubuntu busybox but is in alpine" [ ! "$BASH" ]
       sleep_wait() {
         sleep 1 &
         wait_for_reconnect $!

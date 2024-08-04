@@ -107,11 +107,11 @@ wait_for_reconnect() {
   openvpn_pid=$1
   if [[ ! "$VPN_RECONNECT" ]]; then
     #Just wait until OpenVPN is terminated
-    wait "$openvpn_pid"
+    wait "$openvpn_pid" 2>/dev/null
     return 0
   fi
 
-  if [[ "$VPN_RECONNECT" == *":"* ]]; then
+  if echo "$VPN_RECONNECT" | grep -q ":"; then
     #Convert HH:MM to seconds from now
     local timeout=$(($(date -d "$VPN_RECONNECT" +%s) - $(date +%s)))
     if [[ "$timeout" -lt 0 ]]; then timeout=$((86400 + timeout)); fi
