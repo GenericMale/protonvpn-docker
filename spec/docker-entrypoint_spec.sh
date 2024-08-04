@@ -159,7 +159,7 @@ Describe "docker-entrypoint.sh"
       End
       Example "$1"
         VPN_RECONNECT="$1"
-        When call wait_for_reconnect 69696969 #pass invalid process id so we don't actually have to wait
+        When call wait_for_reconnect 696969 #pass invalid process id so we don't actually have to wait
         The status should be success
         The stdout should match pattern "* Reconnecting on ????-??-?? $2 ($3 sec)"
       End
