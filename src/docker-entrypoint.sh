@@ -24,6 +24,7 @@
 
 : "${HTTP_PROXY:=0}" #Start proxy server
 : "${RESOLVER_CONFIG:=/etc/resolv.conf}"
+: "${EXIT_ON_DISCONNECT:=0}"
 
 log() { echo "$(date "+%Y-%m-%d %H:%M:%S") $1"; }
 run_as_external() { su -s /bin/sh "$EXTERNAL_USER" -c "$1"; }
@@ -119,7 +120,8 @@ wait_for_reconnect() {
     local timeout=$(($(echo "$VPN_RECONNECT" | sed 's/d/*24*3600 +/g; s/h/*3600 +/g; s/m/*60 +/g; s/s/\+/g; s/+[ ]*$//g')))
   fi
 
-  local date="$(date "+%Y-%m-%d %H:%M:%S" -d @$(($(date +%s) + timeout)) 2>/dev/null)"
+  local timestamp=$(($(date +%s) + timeout))
+  local date="$(date "+%Y-%m-%d %H:%M:%S" -d @$timestamp)"
 
   log "Reconnecting on $date ($timeout sec)"
   sleep "$timeout" &
@@ -211,6 +213,8 @@ main() {
     if wait_for_new_ip; then
       wait_for_reconnect "$openvpn_pid"
     fi
+
+    [[ "$EXIT_ON_DISCONNECT" -eq 0 ]] || break
   done
 }
 

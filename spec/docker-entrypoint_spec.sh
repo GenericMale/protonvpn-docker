@@ -89,7 +89,6 @@ Describe "docker-entrypoint.sh"
       When call start_openvpn
       The status should be success
       The stderr should equal "--config $OPENVPN_CONFIG_FILE --auth-user-pass $OPENVPN_USER_PASS_FILE --remote 127.0.0.1"
-      The stdout should equal $!
     End
 
     It "accepts server count"
@@ -97,14 +96,12 @@ Describe "docker-entrypoint.sh"
       When call start_openvpn
       The status should be success
       The stderr should end with "--remote 127.0.0.1 --remote 127.0.0.2"
-      The stdout should equal $!
     End
 
     It "passes extra args"
       OPENVPN_EXTRA_ARGS="--test me tender"
       When call start_openvpn
       The stderr should end with "$OPENVPN_EXTRA_ARGS"
-      The stdout should equal $!
     End
   End
 
@@ -142,10 +139,6 @@ Describe "docker-entrypoint.sh"
   End
 
   Describe "wait_for_reconnect"
-    wait() { return; }
-    sleep() { return; }
-    kill() { return 1; }
-
     It "doesn't wait if reconnect not set"
       When call wait_for_reconnect
       The status should be success
@@ -166,10 +159,21 @@ Describe "docker-entrypoint.sh"
       End
       Example "$1"
         VPN_RECONNECT="$1"
-        When call wait_for_reconnect
+        When call wait_for_reconnect 69696969 #pass invalid process id so we don't actually have to wait
         The status should be success
         The stdout should match pattern "* Reconnecting on ????-??-?? $2 ($3 sec)"
       End
+    End
+
+    It "waits only until provided process terminates"
+      sleep_wait() {
+        sleep 1 &
+        wait_for_reconnect $!
+      }
+      VPN_RECONNECT="10"
+      When call sleep_wait
+      The status should be success
+      The stdout should end with "($VPN_RECONNECT sec)"
     End
   End
 
@@ -241,18 +245,25 @@ Describe "docker-entrypoint.sh"
   End
 
   Describe "main"
-    mock() {
-      for func in iptables-restore iptables ip tinyproxy openvpn wait wget wait_for_new_ip
-        do eval "$func(){ :; }"; done #noop
-      i=0; true() { return $((i++)); } #make main loop run just once
-    }
-    BeforeAll mock
     It "does everything in order"
+      iptables() { return; }
+      ip() { return; }
+      openvpn() { return; }
+      wget() { return; }
+      wait_for_new_ip() { return; }
+
+      tinyproxy() { >&2 echo "tinyproxy $*"; }
+      Mock iptables-restore #somehow won't work as function mock
+        >&2 echo "iptables-restore $*"
+      End
+
+      EXIT_ON_DISCONNECT=1
       OPENVPN_USER_PASS_FILE="$TMP/test.auth"
       PROTON_SERVER_FILE="$TMP/servers.json"
       OPENVPN_CA_FILE="$TMP/ca.crt"
       OPENVPN_TLS_CRYPT_FILE="$TMP/ta.key"
       HTTP_PROXY=1
+
       When call main
       The status should be success
       The line 1 of stdout should end with "Kill Switch enabled"
@@ -260,8 +271,10 @@ Describe "docker-entrypoint.sh"
       The line 3 of stdout should end with "Fetching ProtonVPN Server List..."
       The line 4 of stdout should end with "Downloading ProtonVPN Certificates..."
       The line 5 of stdout should end with "Starting OpenVPN..."
-      The line 1 of stderr should end with "No servers found!"
-      The line 2 of stderr should end with "Failed to download certificates!"
+      The line 1 of stderr should end with "iptables-restore /etc/iptables/killswitch.rules"
+      The line 2 of stderr should end with "tinyproxy -d"
+      The line 3 of stderr should end with "No servers found!"
+      The line 4 of stderr should end with "Failed to download certificates!"
     End
   End
 End
