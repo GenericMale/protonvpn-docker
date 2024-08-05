@@ -1,0 +1,219 @@
+= ProtonVPN Docker Image
+:toc: preamble
+:icons: font
+
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+:project: genericmale/protonvpn
+:badge_url: https://img.shields.io
+:badge_opts: style=flat-square&logoColor=white
+:github_url: https://github.com/{project}-docker
+:codacy_url: https://app.codacy.com/gh/GenericMale/protonvpn-docker
+:codacy_id: 476317284931429ca1c0c827da1ae846
+:dockerhub_url: https://hub.docker.com/r/{project}
+:test_badge_gist: https://gist.githubusercontent.com/GenericMale/d11c7cec7a928d0f605db3682ad2678c/raw/test-badge.json
+
+image:{badge_url}/github/license/{project}-docker?{badge_opts}&logo=github[License,link={github_url}/blob/main/LICENSE]
+image:{badge_url}/github/last-commit/{project}-docker?{badge_opts}&logo=github[Last Commit,link={github_url}]
+image:{badge_url}/github/actions/workflow/status/{project}-docker/docker-publish.yml?{badge_opts}&logo=github[Build,link={github_url}/actions/workflows/docker-publish.yml]
+image:{badge_url}/endpoint?{badge_opts}&logo=github&url={test_badge_gist}[Tests,link={github_url}/tree/main/spec]
+image:{badge_url}/codacy/coverage/{codacy_id}?{badge_opts}&logo=codacy[Coverage,link={codacy_url}/coverage/dashboard]
+image:{badge_url}/codacy/grade/{codacy_id}?{badge_opts}&logo=codacy[Code Quality,link={codacy_url}/dashboard]
+image:{badge_url}/docker/v/{project}?{badge_opts}&logo=docker[Version,link={dockerhub_url}]
+image:{badge_url}/docker/image-size/{project}?{badge_opts}&logo=docker[Image Size,link={dockerhub_url}]
+
+This Docker image provides a lightweight and secure solution to connect your containers to ProtonVPN.
+
+== Features
+
+Minimal Footprint:: Built on Alpine Linux for a compact image size.
+Flexible Server Selection:: Use JQ filters for granular control over servers with random selection.
+Automatic Server Rotation (Optional):: Schedule automatic reconnection to switch servers periodically.
+Multi-Container Support:: Easily connect any number of containers to the VPN.
+Kill Switch:: Disconnect containers on VPN drop.
+HTTP Proxy (Optional):: Easily route any http and https traffic through the VPN.
+
+== Usage
+
+. *Obtain OpenVPN Credentials:* Get your credentials from your ProtonVPN account: https://account.proton.me/u/0/vpn/OpenVpnIKEv2.
+. *Configure Credentials:* Choose one of the following methods:
+* *Secrets File:* Create a file containing your username and password on separate lines. Set the `AUTH_USER_PASS_FILE` environment variable to the file path.
+* *Environment Variables:* Define the `OPENVPN_USER` and `OPENVPN_PASS` environment variables with your credentials.
+. *Connect Containers and/or Enable HTTP Proxy:*
+* *VPN Access:* Use the `network_mode: service:protonvpn` option in your Docker Compose configuration for containers requiring VPN protection.
+* *HTTP Proxy:* Set the `HTTP_PROXY` environment variable to `1` and map port `3128` to use the VPN in any application with HTTP(S) proxy support.
+
+[IMPORTANT]
+.Port Mapping
+Since containers share the network stack when using `network_mode`, the port mappings for services requiring external access need to be defined on the ProtonVPN container.
+
+=== Docker Compose Examples
+
+==== Sharing Network with Container
+
+[source,yaml]
+----
+services:
+  protonvpn:
+    image: genericmale/protonvpn
+    restart: unless-stopped
+    environment:
+      - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
+      - VPN_RECONNECT=2:00 <1>
+      - VPN_SERVER_COUNT=10 <2>
+    ports:
+      - 8118:8118 <3>
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    devices:
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    secrets:
+      - protonvpn
+  privoxy:
+    image: vimagick/privoxy
+    restart: unless-stopped
+    network_mode: service:protonvpn <4>
+    depends_on:
+      protonvpn:
+        condition: service_healthy <5>
+secrets:
+  protonvpn:
+    file: protonvpn.auth
+----
+
+This configuration achieves the following:
+
+<1> Schedules reconnection at 2:00 AM to rotate servers.
+<2> Randomly selects one of the 10 fastest servers.
+<3> Exposes Privoxy’s port for clients to connect to the VPN using Privoxy as a forward proxy.
+<4> Runs a Privoxy container attached to the VPN network.
+<5> Privoxy is not started until the VPN is connected.
+
+==== Using HTTP(S) Proxy
+
+[source,yaml]
+----
+services:
+  protonvpn:
+    image: genericmale/protonvpn
+    restart: unless-stopped
+    environment:
+      - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
+      - HTTP_PROXY=1
+    ports:
+      - 3128:3128
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    devices:
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    secrets:
+      - protonvpn
+secrets:
+  protonvpn:
+    file: protonvpn.auth
+----
+
+=== Environment Variables
+
+[%autowidth.stretch,cols="m,m,d",stripes=even]
+|===
+|Variable|Default|Description
+
+|OPENVPN_USER_PASS_FILE
+|/etc/openvpn/protonvpn.auth
+|Path to a file containing your OpenVPN username and password on separate lines.
+
+|OPENVPN_USER
+|_(undefined)_
+|Username for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn’t exist.
+
+|OPENVPN_PASS
+|_(undefined)_
+|Password for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn’t exist.
+
+|OPENVPN_EXTRA_ARGS
+|_(undefined)_
+|Additional arguments to pass to the OpenVPN command.
+
+|PROTON_TIER
+|2
+|Your Proton Tier. Valid values: 0 (Free), 1 (Basic), 2 (Plus), 3 (Visionary)
+
+|IP_CHECK_URL
+|https://ifconfig.co/json
+|URL to check for a new IP address after connecting to the VPN. Unset to disable.
+
+|CONNECT_TIMEOUT
+|60
+|Maximum time in seconds to wait for a new IP before a reconnect is triggered.
+
+|VPN_SERVER_FILTER
+|.
+|Optional JQ filter to apply to the server list returned by the API. By default, servers are ranked by their score (closest/fastest on top).
+
+|VPN_SERVER_COUNT
+|1
+|Number of top servers (from the filtered list) to pass to OpenVPN. One server from this list will be randomly chosen for connection.
+
+|VPN_RECONNECT
+|_(undefined)_
+|Optional time to schedule automatic reconnection. Either HH:MM for a daily reconnect at a fixed time, or a duration to wait (e.g. 30m, 12h).
+
+|VPN_KILL_SWITCH
+|1
+|When enabled (1), disconnects the network when the VPN drops. Set to 0 to disable.
+
+|HTTP_PROXY
+|0
+|When enabled (1), starts tinyproxy on port 3128.
+|===
+
+=== JQ Filters for Advanced Server Selection
+
+The `VPN_SERVER_FILTER` environment variable allows you to filter available ProtonVPN servers using JQ queries.
+
+.Some examples
+[source,yaml]
+----
+# Fastest Servers from Germany
+- VPN_SERVER_FILTER=map(select(.ExitCountry == "DE"))
+
+# Servers with Lowest Load
+- VPN_SERVER_FILTER=sort_by(.Load)
+
+# Specific server
+- VPN_SERVER_FILTER=map(select(.Name == "GR#3"))
+
+# Fastest Servers from Berlin with Load <50%
+- VPN_SERVER_FILTER=map(select(.City == "Berlin" and .Load < 50))
+
+# Fastest Servers from Different Countries
+- VPN_SERVER_FILTER=group_by(.ExitCountry) | map(.[0]) | sort_by(.Score)
+----
+
+== Building
+
+The image can be built by cloning the repository and running the following command (adapt tag name to your liking):
+
+[source,sh]
+----
+docker image build ./src -t protonvpn
+----
+
+== Additional Resources
+
+* Docker Compose Overview: https://docs.docker.com/compose/
+* ProtonVPN Documentation: https://protonvpn.com/support/linux-openvpn/
+* OpenVPN Reference Manual: https://openvpn.net/community-resources/reference-manual-for-openvpn-2-6/
+* Tinyproxy: https://tinyproxy.github.io/
+* JQ Manual: https://jqlang.github.io/jq/manual/
