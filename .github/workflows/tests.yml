@@ -19,11 +19,17 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - name: Download JQ
+        run: |
+          wget https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -O jq
+          chmod +x jq
       - name: Run tests on busybox
         uses: docker://shellspec/shellspec:0.28.1-kcov
         continue-on-error: true
         with:
           args: -s "busybox ash" -o junit
+        env:
+          PATH: /github/workspace:/opt/shellspec:/usr/local/bin:/usr/bin:/bin
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@567cc7f8dcea3eba5da355f6ebc95663310d8a07 # v2.17.0
         id: test-results
@@ -55,11 +61,17 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - name: Download JQ
+        run: |
+          wget https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -O jq
+          chmod +x jq
       - name: Run tests with coverage
         uses: docker://shellspec/shellspec:0.28.1-kcov
         continue-on-error: true
         with:
           args: -s "bash" --kcov
+        env:
+          PATH: /github/workspace:/opt/shellspec:/usr/local/bin:/usr/bin:/bin
       - name: Publish Coverage
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699 # v1.3.0
         with:
