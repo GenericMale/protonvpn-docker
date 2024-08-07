@@ -35,9 +35,9 @@ This Docker image provides a lightweight and secure solution to connect your con
    - **HTTP Proxy:** Set the `HTTP_PROXY` environment variable to `1` and map port `3128` to use the VPN in any
      application with HTTP(S) proxy support.
 
-**Important Note on Port Mapping:**
-Since containers share the network stack when using `network_mode`, the port mappings for services requiring external
-access need to be defined on the ProtonVPN container.
+> [!IMPORTANT]
+> Since containers share the network stack when using `network_mode`, the port mappings for services requiring external
+> access need to be defined on the ProtonVPN container.
 
 ### Example Docker Compose with other Container
 
