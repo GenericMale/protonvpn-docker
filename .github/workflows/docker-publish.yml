@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: write
       packages: write
       security-events: write
     steps:
@@ -73,7 +73,7 @@ jobs:
         uses: aquasecurity/trivy-action@d9cd5b1c23aaf8cb31bb09141028215828364bbb # v0.24.0
         with:
           image-ref: ${{ env.GITHUB_IMAGE }}@${{ steps.build.outputs.digest }}
-          scanners: 'vuln,secret,config'
+          scanners: 'vuln,secret,misconfig'
           format: 'sarif'
           output: 'trivy-results.sarif'
 
@@ -88,7 +88,7 @@ jobs:
         uses: aquasecurity/trivy-action@d9cd5b1c23aaf8cb31bb09141028215828364bbb # v0.24.0
         with:
           image-ref: ${{ env.GITHUB_IMAGE }}@${{ steps.build.outputs.digest }}
-          scanners: 'vuln,secret,config'
+          scanners: 'vuln,secret,misconfig'
           format: 'github'
           output: 'dependency-results.sbom.json'
           github-pat: ${{ secrets.GITHUB_TOKEN }}
