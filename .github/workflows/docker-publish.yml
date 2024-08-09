@@ -84,10 +84,6 @@ jobs:
 
       - name: Delete old images
         if: github.event_name != 'pull_request'
-        uses: snok/container-retention-policy@4f22ef80902ad409ed55a99dc5133cc1250a0d03 # v3.0.0
+        uses: dataaxiom/ghcr-cleanup-action@603b4922f86743648bcdc1806f5b33f8c0f00d41 # v1.0.7
         with:
-          account: user
           token: ${{ secrets.GITHUB_TOKEN }}
-          cut-off: 0s
-          image-names: ${{ github.event.repository.name }}
-          tag-selection: untagged

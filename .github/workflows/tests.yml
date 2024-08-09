@@ -24,7 +24,7 @@ jobs:
           wget https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -O jq
           chmod +x jq
       - name: Run tests on busybox
-        uses: docker://shellspec/shellspec:0.28.1-kcov
+        uses: docker://shellspec/shellspec@sha256:39346b73db30d00001355a3e6e3138396a20d2d90245a37c619520630b8a9b3e # 0.28.1-kcov
         continue-on-error: true
         with:
           args: -s "busybox ash" -o junit
@@ -66,7 +66,7 @@ jobs:
           wget https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -O jq
           chmod +x jq
       - name: Run tests with coverage
-        uses: docker://shellspec/shellspec:0.28.1-kcov
+        uses: docker://shellspec/shellspec@sha256:39346b73db30d00001355a3e6e3138396a20d2d90245a37c619520630b8a9b3e # 0.28.1-kcov
         continue-on-error: true
         with:
           args: -s "bash" --kcov
