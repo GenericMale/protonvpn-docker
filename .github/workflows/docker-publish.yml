@@ -95,6 +95,6 @@ jobs:
 
       - name: Delete old images
         if: github.event_name != 'pull_request'
-        uses: dataaxiom/ghcr-cleanup-action@ff99a6ed7810975f36d55dc1cbde95295df0913c # v1.0.8
+        uses: dataaxiom/ghcr-cleanup-action@0fd10e8918e3994b92c417a43fb6e33bc6188c9e # v1.0.10
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
