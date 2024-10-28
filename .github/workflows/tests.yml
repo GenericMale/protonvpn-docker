@@ -31,7 +31,7 @@ jobs:
         env:
           PATH: /github/workspace:/opt/shellspec:/usr/local/bin:/usr/bin:/bin
       - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@567cc7f8dcea3eba5da355f6ebc95663310d8a07 # v2.17.0
+        uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # v2.18.0
         id: test-results
         with:
           files: report/results_junit.xml
