@@ -1,0 +1,26 @@
+# Linux
+*~
+.fuse_hidden*
+.directory
+
+# Windows
+Thumbs.db
+*.stackdump
+[Dd]esktop.ini
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# VSCode
+.vscode/
+.history/
+*.vsix
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
