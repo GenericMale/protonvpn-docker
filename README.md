@@ -42,12 +42,14 @@ services:
     image: genericmale/protonvpn
     restart: unless-stopped
     environment:
-      - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
+      - PROTON_USER=your_username
+      - PROTON_PASS=your_password
       - VPN_RECONNECT=2:00
       - VPN_SERVER_COUNT=10
     ports:
       - 8118:8118 # Privoxy Port
     volumes:
+      - ./proton_data:/etc/openvpn/Proton
       - /etc/localtime:/etc/localtime:ro
     devices:
       - /dev/net/tun
@@ -62,9 +64,6 @@ services:
     depends_on:
       protonvpn:
         condition: service_healthy
-secrets:
-  protonvpn:
-    file: protonvpn.auth
 ```
 
 This configuration achieves the following:
@@ -84,7 +83,8 @@ services:
     image: genericmale/protonvpn
     restart: unless-stopped
     environment:
-      - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
+      - PROTON_USER=your_username
+      - PROTON_PASS=your_password
       - HTTP_PROXY=1
     ports:
       - 3128:3128
@@ -97,9 +97,6 @@ services:
       - NET_ADMIN
     secrets:
       - protonvpn
-secrets:
-  protonvpn:
-    file: protonvpn.auth
 ```
 
 ### Environment Variables
