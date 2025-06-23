@@ -22,14 +22,9 @@ This Docker image provides a lightweight and secure solution to connect your con
 
 ## Usage
 
-1. **Obtain OpenVPN Credentials:** Get your credentials from your ProtonVPN
-   account: [https://account.proton.me/u/0/vpn/OpenVpnIKEv2](https://account.proton.me/u/0/vpn/OpenVpnIKEv2).
-2. **Configure Credentials:** Choose one of the following methods:
-   - **Secrets File:** Create a file containing your username and password on separate lines. Set
-     the `AUTH_USER_PASS_FILE` environment variable to the file path.
-   - **Environment Variables:** Define the `OPENVPN_USER` and `OPENVPN_PASS` environment variables with your
-     credentials.
-3. **Connect Containers and/or Enable HTTP Proxy:**
+1. **Configure Credentials:** Define the `PROTON_USER` and `PROTON_PASS` environment variables with your
+     proton credentials. If 2FA is enabled on the proton account, the current code can be set via `PROTON_2FA` or the container will ask for it in interactive mode. Authentication data is cached in the `/etc/openvpn/Proton` Volume.
+2. **Connect Containers and/or Enable HTTP Proxy:**
    - **VPN Access:** Use the `network_mode: service:protonvpn` option in your Docker Compose configuration for
      containers requiring VPN protection.
    - **HTTP Proxy:** Set the `HTTP_PROXY` environment variable to `1` and map port `3128` to use the VPN in any
@@ -94,6 +89,7 @@ services:
     ports:
       - 3128:3128
     volumes:
+      - ./proton_data:/etc/openvpn/Proton
       - /etc/localtime:/etc/localtime:ro
     devices:
       - /dev/net/tun
@@ -110,9 +106,9 @@ secrets:
 
 | Variable               | Default                     | Description                                                                                                                                  |
 |------------------------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| OPENVPN_USER_PASS_FILE | /etc/openvpn/protonvpn.auth | Path to a file containing your OpenVPN username and password on separate lines.                                                              |
-| OPENVPN_USER           | *(undefined)*               | Username for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn't exist.                                            |
-| OPENVPN_PASS           | *(undefined)*               | Password for authentication. Will be used to create `OPENVPN_USER_PASS_FILE` if it doesn't exist.                                            |
+| PROTON_USER            | *(undefined)*               | ProtonVPN username used to fetch the server list and OpenVPN configuration.                                                                  |
+| PROTON_PASS            | *(undefined)*               | ProtonVPN password.                                                                                                                          |
+| PROTON_2FA             | *(undefined)*               | 2FA code (if enabled on proton account). Only required once because authentication data will be cached in the `/etc/openvpn/Proton`          |
 | OPENVPN_EXTRA_ARGS     | *(undefined)*               | Additional arguments to pass to the OpenVPN command.                                                                                         |
 | PROTON_TIER            | 2                           | Your Proton Tier. Valid values: 0 (Free), 1 (Basic), 2 (Plus), 3 (Visionary)                                                                 |
 | IP_CHECK_URL           | <https://ifconfig.co/json>  | URL to check for a new IP address after connecting to the VPN. Unset to disable.                                                             |

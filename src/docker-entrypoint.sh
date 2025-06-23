@@ -15,10 +15,6 @@
 : "${OPENVPN_CONFIG_FILE:=/etc/openvpn/protonvpn.ovpn}"
 : "${OPENVPN_EXTRA_ARGS:=}"
 
-: "${OPENVPN_CA_FILE:=/etc/openvpn/ca.crt}"
-: "${OPENVPN_TLS_CRYPT_FILE:=/etc/openvpn/ta.key}"
-
-: "${PROTON_API_URL:=https://api.protonvpn.ch}"
 : "${PROTON_TIER:=2}" #Proton Tier. 0=Free, 1=Basic, 2=Plus, 3=Visionary
 : "${PROTON_SERVER_FILE:=/etc/openvpn/servers.json}"
 
@@ -34,12 +30,6 @@
 
 log() { echo "$(date "+%Y-%m-%d %H:%M:%S") $1"; }
 run_as_external() { su -s /bin/sh "$EXTERNAL_USER" -c "$1"; }
-
-create_user_pass_file() {
-  if [[ -f "$OPENVPN_USER_PASS_FILE" ]]; then return 0; fi
-  echo "$OPENVPN_USER" >"$OPENVPN_USER_PASS_FILE"
-  echo "$OPENVPN_PASS" >>"$OPENVPN_USER_PASS_FILE"
-}
 
 setup_split_tunnel() {
   local gateway="$(ip route | grep -m 1 default | cut -d' ' -f3)"
@@ -60,42 +50,6 @@ setup_split_tunnel() {
   #Redirect DNS to original nameserver
   iptables -t nat -A OUTPUT -m mark --mark 1 -p udp --dport 53 -j DNAT --to-destination "$nameserver"
   iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE
-}
-
-download_servers() {
-  log "Fetching ProtonVPN Server List..."
-
-  #Filters by proton tier & enabled status and sort for fastest
-  local filter=".LogicalServers | map(select(.Tier <= $PROTON_TIER and .Status == 1)) | sort_by(.Score)"
-  run_as_external "wget -q -O- $PROTON_API_URL/vpn/logicals | jq \"$filter | $VPN_SERVER_FILTER\"" >"$PROTON_SERVER_FILE"
-
-  if [[ -s "$PROTON_SERVER_FILE" ]]; then
-    log "Found $(jq -r "length" "$PROTON_SERVER_FILE") servers."
-  else
-    log >&2 "No servers found!"
-    return 1
-  fi
-}
-
-generate_certificates() {
-  if [[ -f "$OPENVPN_CA_FILE" ]] && [[ -f "$OPENVPN_TLS_CRYPT_FILE" ]]; then return 0; fi
-
-  log "Downloading ProtonVPN Certificates..."
-
-  #Get ProtonVPN config by using first server
-  local logical_id="$(jq -r ".[0].ID" "$PROTON_SERVER_FILE")"
-  local openvpn_config="$(
-    run_as_external "wget -q -O- \"$PROTON_API_URL/vpn/config?Platform=Linux&Protocol=udp&LogicalID=$logical_id\""
-  )"
-
-  if [[ "$openvpn_config" ]]; then
-    #Extract CA cert & TLS key from config
-    echo "$openvpn_config" | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' >"$OPENVPN_CA_FILE"
-    echo "$openvpn_config" | sed -n '/BEGIN OpenVPN Static key/,/END OpenVPN Static key/p' >"$OPENVPN_TLS_CRYPT_FILE"
-  else
-    log >&2 "Failed to download certificates!"
-    return 1
-  fi
 }
 
 # shellcheck disable=SC2086
@@ -181,9 +135,10 @@ wait_for_new_ip() {
 }
 
 start_openvpn() {
-  #Get Server IPs, remove duplicates and limit number of results.
+  #Filters servers by proton tier, enabled status, sort for fastest, get IPs, remove duplicates and limit number of results.
+  local filter=".LogicalServers | map(select(.Tier <= $PROTON_TIER and .Status == 1)) | sort_by(.Score)"
   local get_unique_ip_list="map({(.Servers[].EntryIP):1}) | add | keys_unsorted | .[:$VPN_SERVER_COUNT][]"
-  local servers="$(jq -r "$get_unique_ip_list" "$PROTON_SERVER_FILE")"
+  local servers="$(jq -r "$filter | $VPN_SERVER_FILTER | $get_unique_ip_list" "$PROTON_SERVER_FILE")"
 
   # shellcheck disable=SC2086
   openvpn \
@@ -200,7 +155,6 @@ main() {
   fi
 
   setup_split_tunnel
-  create_user_pass_file
 
   if [[ "$HTTP_PROXY" -eq 1 ]]; then
     log "Starting Proxy..."
@@ -208,8 +162,9 @@ main() {
   fi
 
   while true; do
-    download_servers
-    generate_certificates
+    log "Fetching ProtonVPN Server List..."
+    run_as_external "/etc/openvpn/protonvpn.py"
+
     kill_process openvpn
 
     log "Starting OpenVPN..."
